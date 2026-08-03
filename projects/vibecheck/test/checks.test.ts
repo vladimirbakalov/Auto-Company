@@ -49,6 +49,22 @@ describe('selectCandidateFiles', () => {
     const tree = ['image.png', 'notes.txt'];
     expect(selectCandidateFiles(tree)).toEqual([]);
   });
+
+  it('includes credential-shaped JSON files (service accounts, client secrets)', () => {
+    const tree = [
+      'config/my-app-firebase-adminsdk-x1y2z.json',
+      'secrets/service-account.json',
+      'client_secret_123.json',
+      'package-lock.json',
+      'tsconfig.json',
+    ];
+    const result = selectCandidateFiles(tree);
+    expect(result).toContain('config/my-app-firebase-adminsdk-x1y2z.json');
+    expect(result).toContain('secrets/service-account.json');
+    expect(result).toContain('client_secret_123.json');
+    expect(result).not.toContain('package-lock.json');
+    expect(result).not.toContain('tsconfig.json');
+  });
 });
 
 describe('checkExposedEnv', () => {
@@ -172,6 +188,23 @@ describe('checkHardcodedSecrets', () => {
   it('still scans package.json itself', () => {
     const findings = checkHardcodedSecrets([file('package.json', 'AKIAABCDEFGHIJKLMNOP')]);
     expect(findings).toHaveLength(1);
+  });
+
+  it('scans credential-shaped JSON files (GCP/Firebase service accounts)', () => {
+    const findings = checkHardcodedSecrets([
+      file(
+        'config/my-app-firebase-adminsdk-x1y2z.json',
+        '{"private_key": "-----BEGIN PRIVATE KEY-----\\nMIIEvQIBADANBg==\\n-----END PRIVATE KEY-----\\n"}'
+      ),
+    ]);
+    expect(findings.some(f => f.title.includes('PEM private key'))).toBe(true);
+  });
+
+  it('flags a PEM private key in any source file, not just credential JSON', () => {
+    const findings = checkHardcodedSecrets([
+      file('scripts/deploy.ts', 'const key = `-----BEGIN RSA PRIVATE KEY-----\nMIIEvQIBADANBg==\n-----END RSA PRIVATE KEY-----`;'),
+    ]);
+    expect(findings.some(f => f.title.includes('PEM private key'))).toBe(true);
   });
 });
 

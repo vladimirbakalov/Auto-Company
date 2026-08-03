@@ -25,6 +25,12 @@ const ALWAYS_INCLUDE_BASENAMES = new Set([
   '.env', '.env.local', '.env.production', '.gitignore', 'package.json',
 ]);
 
+// Cloud credential JSON files (GCP/Firebase service accounts, OAuth client
+// secrets) are a common real-world leak in vibe-coded repos, but generic
+// .json isn't in SOURCE_EXTENSIONS (that would pull in package-lock.json,
+// tsconfig.json, etc.) so these were structurally invisible to the scanner.
+const CREDENTIAL_JSON_HINT = /(service[-_]?account|firebase-adminsdk|gcp[-_]?key|client_secret|credentials?)[^/]*\.json$/i;
+
 function isSourceFile(path: string): boolean {
   return SOURCE_EXTENSIONS.some(ext => path.endsWith(ext));
 }
@@ -42,7 +48,9 @@ function isMigrationOrSql(path: string): boolean {
 export function selectCandidateFiles(tree: string[]): string[] {
   const basename = (p: string) => p.split('/').pop() ?? p;
 
-  const always = tree.filter(p => ALWAYS_INCLUDE_BASENAMES.has(basename(p)));
+  const always = tree.filter(
+    p => ALWAYS_INCLUDE_BASENAMES.has(basename(p)) || CREDENTIAL_JSON_HINT.test(p)
+  );
   const migrations = tree.filter(isMigrationOrSql).slice(0, 8);
   const sourceFiles = tree.filter(isSourceFile);
 
@@ -111,6 +119,11 @@ const SECRET_PATTERNS: { name: string; regex: RegExp; severity: Finding['severit
     regex: /service_role["'\s:=]+["']?eyJ[A-Za-z0-9_-]{10,}\.[A-Za-z0-9_-]{10,}/,
     severity: 'critical',
   },
+  {
+    name: 'PEM private key (e.g. GCP/Firebase service account credential)',
+    regex: /-----BEGIN (RSA |EC |OPENSSH )?PRIVATE KEY-----/,
+    severity: 'critical',
+  },
 ];
 
 const PLACEHOLDER_VALUES = /^(your[-_]?|xxx+|changeme|example|placeholder|<.*>|\.{3,}|test|dummy)/i;
@@ -132,8 +145,16 @@ export function checkHardcodedSecrets(files: RepoFile[]): Finding[] {
   const findings: Finding[] = [];
 
   for (const file of files) {
-    // Skip files that are clearly not shipped source (tests fixtures, lockfiles).
-    if (/\.(lock|json)$/.test(file.path) && !/package\.json$/.test(file.path)) continue;
+    // Skip files that are clearly not shipped source (lockfiles, non-credential json)
+    // but keep scanning credential-shaped json (service accounts, client secrets).
+    if (/\.lock$/.test(file.path)) continue;
+    if (
+      /\.json$/.test(file.path) &&
+      !/package\.json$/.test(file.path) &&
+      !CREDENTIAL_JSON_HINT.test(file.path)
+    ) {
+      continue;
+    }
 
     for (const pattern of SECRET_PATTERNS) {
       if (pattern.regex.test(file.content)) {
