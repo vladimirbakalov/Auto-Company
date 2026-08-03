@@ -1,0 +1,20 @@
+{
+  "name": "vibecheck",
+  "version": "0.1.0",
+  "description": "Vibe-Coded App Health Check — free security-risk scanner for AI-generated apps (Lovable/Bolt/Replit/Cursor/v0), hosted on Cloudflare Workers",
+  "private": true,
+  "scripts": {
+    "dev": "wrangler dev",
+    "deploy": "wrangler deploy",
+    "typecheck": "tsc --noEmit",
+    "staging:deploy": "wrangler deploy --env staging"
+  },
+  "dependencies": {
+    "hono": "^4.6.0"
+  },
+  "devDependencies": {
+    "@cloudflare/workers-types": "^4.20241127.0",
+    "typescript": "^5.7.3",
+    "wrangler": "^3.99.0"
+  }
+}
