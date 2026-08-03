@@ -19,5 +19,10 @@
     "@cloudflare/workers-types": "^4.20241127.0",
     "typescript": "^5.7.3",
     "wrangler": "^3.99.0"
+  },
+  "allowScripts": {
+    "esbuild@0.17.19": true,
+    "sharp@0.33.5": true,
+    "workerd@1.20250718.0": true
   }
 }
