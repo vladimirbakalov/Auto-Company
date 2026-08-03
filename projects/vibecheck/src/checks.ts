@@ -80,7 +80,9 @@ export function checkExposedEnv(tree: string[], files: RepoFile[]): Finding[] {
   if (!envInTree) return [];
 
   const gitignore = files.find(f => f.path.split('/').pop() === '.gitignore');
-  const ignoresEnv = gitignore ? /(^|\n)\s*\.env\s*($|\n)/.test(gitignore.content) : false;
+  const ignoresEnv = gitignore
+    ? /(^|\n)\s*(\*\*\/)?\.env\*?\s*($|\n)/.test(gitignore.content)
+    : false;
 
   if (ignoresEnv) {
     return [
@@ -196,9 +198,9 @@ export function checkHardcodedSecrets(files: RepoFile[]): Finding[] {
 export function checkPermissiveCors(files: RepoFile[]): Finding[] {
   const findings: Finding[] = [];
   const patterns = [
-    /Access-Control-Allow-Origin['"]?\s*[:,]\s*['"]\*['"]/,
-    /origin\s*:\s*['"]\*['"]/,
-    /cors\(\s*\{\s*origin\s*:\s*true/,
+    /Access-Control-Allow-Origin['"]?\s*[:,]\s*['"]\*['"]/i,
+    /origin\s*:\s*['"]\*['"]/i,
+    /cors\(\s*\{\s*origin\s*:\s*true/i,
   ];
 
   for (const file of files) {
@@ -225,7 +227,9 @@ export function checkSupabaseRLS(tree: string[], files: RepoFile[]): Finding[] {
   if (!usesSupabaseClient) return [];
 
   const hasMigrationEvidence = tree.some(isMigrationOrSql);
-  const hasPolicyMention = files.some(f => /\bpolicy\b|row level security|row-level security/i.test(f.content));
+  const hasPolicyMention = files.some(f =>
+    /\brow[- ]level security\b|\bcreate\s+policy\b|\brls\b/i.test(f.content)
+  );
 
   if (hasMigrationEvidence || hasPolicyMention) return [];
 

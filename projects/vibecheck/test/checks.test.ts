@@ -102,6 +102,13 @@ describe('checkExposedEnv', () => {
     const findings = checkExposedEnv(['server/.env'], []);
     expect(findings).toHaveLength(1);
   });
+
+  it('downgrades to medium when .gitignore excludes .env via a .env* wildcard', () => {
+    const gitignore = file('.gitignore', 'node_modules\n.env*\ndist\n');
+    const findings = checkExposedEnv(['.env'], [gitignore]);
+    expect(findings).toHaveLength(1);
+    expect(findings[0].severity).toBe('medium');
+  });
 });
 
 describe('checkHardcodedSecrets', () => {
@@ -232,6 +239,13 @@ describe('checkPermissiveCors', () => {
     ]);
     expect(findings).toEqual([]);
   });
+
+  it('flags a lowercase access-control-allow-origin header name', () => {
+    const findings = checkPermissiveCors([
+      file('src/mw.ts', 'res.headers.set("access-control-allow-origin", "*");'),
+    ]);
+    expect(findings).toHaveLength(1);
+  });
 });
 
 describe('checkSupabaseRLS', () => {
@@ -265,6 +279,22 @@ describe('checkSupabaseRLS', () => {
     const files = [
       file('src/db.ts', 'createClient(url, key); // supabase'),
       file('docs/notes.md', 'We enabled row level security on all tables.'),
+    ];
+    expect(checkSupabaseRLS(['src/db.ts'], files)).toEqual([]);
+  });
+
+  it('still flags when the only "policy" mention is unrelated (cookie policy)', () => {
+    const files = [
+      file('src/db.ts', 'createClient(url, key); // supabase'),
+      file('docs/notes.md', 'See our cookie policy and retry policy for details.'),
+    ];
+    expect(checkSupabaseRLS(['src/db.ts'], files)).toHaveLength(1);
+  });
+
+  it('does not flag when a CREATE POLICY statement is present', () => {
+    const files = [
+      file('src/db.ts', 'createClient(url, key); // supabase'),
+      file('scripts/setup.sql', 'create policy "allow read" on public.items for select using (true);'),
     ];
     expect(checkSupabaseRLS(['src/db.ts'], files)).toEqual([]);
   });
