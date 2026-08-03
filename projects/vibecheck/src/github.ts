@@ -29,6 +29,63 @@ export const MAX_FILES_TO_FETCH = 40;
 // are out of scope for the MVP — see README "Out of scope").
 const MAX_TREE_ENTRIES = 5000;
 
+// Every outbound fetch (GitHub API + raw content) gets a hard deadline so a
+// slow/hanging upstream can't tie up a Worker invocation indefinitely. Found
+// during pre-launch QA audit (docs/qa/vibecheck-security-audit-cycle1137.md).
+const FETCH_TIMEOUT_MS = 10_000;
+
+// Hard byte cap enforced while *streaming* the response body, independent of
+// the Content-Length header. A malicious/misconfigured origin could omit or
+// lie about Content-Length; without this, fetchFileContent's existing
+// "skip if content-length > 300_000" check could be bypassed, and Promise.all
+// over MAX_FILES_TO_FETCH files would buffer unbounded content into memory.
+const MAX_FILE_BYTES = 300_000;
+
+async function fetchWithTimeout(url: string, init: RequestInit): Promise<Response> {
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), FETCH_TIMEOUT_MS);
+  try {
+    return await fetch(url, { ...init, signal: controller.signal });
+  } finally {
+    clearTimeout(timer);
+  }
+}
+
+// Reads a response body up to `maxBytes`, decoding as UTF-8. Returns null if
+// the body exceeds the cap (rather than truncating silently and risking a
+// truncated file producing misleading — or missed — findings).
+async function readTextBounded(res: Response, maxBytes: number): Promise<string | null> {
+  if (!res.body) {
+    return await res.text();
+  }
+  const reader = res.body.getReader();
+  const chunks: Uint8Array[] = [];
+  let total = 0;
+  try {
+    for (;;) {
+      const { done, value } = await reader.read();
+      if (done) break;
+      if (value) {
+        total += value.byteLength;
+        if (total > maxBytes) {
+          await reader.cancel();
+          return null;
+        }
+        chunks.push(value);
+      }
+    }
+  } finally {
+    reader.releaseLock?.();
+  }
+  const combined = new Uint8Array(total);
+  let offset = 0;
+  for (const chunk of chunks) {
+    combined.set(chunk, offset);
+    offset += chunk.byteLength;
+  }
+  return new TextDecoder('utf-8').decode(combined);
+}
+
 function userAgent(): string {
   return 'vibecheck-scanner (+https://github.com/vladimirbakalov/Auto-Company)';
 }
@@ -77,7 +134,15 @@ export function parseRepoUrl(input: string): RepoRef {
 }
 
 async function githubFetch(url: string, env: Env, accept: string): Promise<Response> {
-  const res = await fetch(url, { headers: githubHeaders(env, accept) });
+  let res: Response;
+  try {
+    res = await fetchWithTimeout(url, { headers: githubHeaders(env, accept) });
+  } catch (err) {
+    if (err instanceof Error && err.name === 'AbortError') {
+      throw new ScanError('GitHub API request timed out. Please try again.', 502);
+    }
+    throw new ScanError('Could not reach GitHub API. Please try again.', 502);
+  }
 
   if (res.status === 403 || res.status === 429) {
     const remaining = res.headers.get('x-ratelimit-remaining');
@@ -149,11 +214,11 @@ export async function fetchFileContent(
       .split('/')
       .map(encodeURIComponent)
       .join('/')}`;
-    const res = await fetch(url, { headers: { 'User-Agent': userAgent() } });
+    const res = await fetchWithTimeout(url, { headers: { 'User-Agent': userAgent() } });
     if (!res.ok) return null;
     const contentLength = res.headers.get('content-length');
-    if (contentLength && Number(contentLength) > 300_000) return null; // skip huge files
-    return await res.text();
+    if (contentLength && Number(contentLength) > MAX_FILE_BYTES) return null; // skip huge files
+    return await readTextBounded(res, MAX_FILE_BYTES);
   } catch {
     return null;
   }
