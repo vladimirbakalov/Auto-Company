@@ -114,6 +114,37 @@ export function landingPage(): string {
 
   .meta-line { color: var(--muted); font-size: 13px; margin-top: 18px; border-top: 1px solid var(--panel-border); padding-top: 14px; }
 
+  .waitlist { margin-top: 24px; padding-top: 20px; border-top: 1px solid var(--panel-border); }
+  .waitlist p { color: var(--muted); font-size: 14px; margin: 0 0 12px; }
+  .waitlist form { display: flex; gap: 8px; }
+  .waitlist input[type="email"] {
+    flex: 1;
+    background: #0e1117;
+    border: 1px solid var(--panel-border);
+    color: var(--text);
+    border-radius: 8px;
+    padding: 11px 14px;
+    font-size: 14px;
+    outline: none;
+  }
+  .waitlist input[type="email"]:focus { border-color: var(--accent-dim); }
+  .waitlist button {
+    background: var(--accent);
+    color: #06281c;
+    border: none;
+    border-radius: 8px;
+    padding: 11px 18px;
+    font-size: 14px;
+    font-weight: 600;
+    cursor: pointer;
+    white-space: nowrap;
+  }
+  .waitlist button:hover { background: var(--accent-dim); }
+  .waitlist button:disabled { opacity: 0.6; cursor: default; }
+  .waitlist-msg { font-size: 13px; margin-top: 10px; }
+  .waitlist-msg.ok { color: var(--accent); }
+  .waitlist-msg.err { color: var(--critical); }
+
   footer { text-align: center; color: var(--muted); font-size: 13px; margin-top: 48px; }
   footer a { color: var(--muted); }
 
@@ -187,8 +218,56 @@ export function landingPage(): string {
 
     html += '<div class="meta-line">Scanned ' + data.filesScanned + ' of ' + data.filesInTree + ' files in the repo (sampled, not exhaustive &mdash; see note below). ' + escapeHtml(data.notes.join(' ')) + '</div>';
 
+    html += '<div class="waitlist">';
+    html += '<p>Want an alert when your API bill spikes, or your app goes down? Join the waitlist for cost + uptime monitoring.</p>';
+    html += '<form id="waitlist-form">';
+    html += '<input type="email" id="waitlist-email" placeholder="you@example.com" autocomplete="email" required />';
+    html += '<button type="submit" id="waitlist-btn">Join waitlist</button>';
+    html += '</form>';
+    html += '<div id="waitlist-msg" class="waitlist-msg" style="display:none;"></div>';
+    html += '</div>';
+
     resultEl.innerHTML = html;
     resultEl.style.display = 'block';
+
+    wireWaitlistForm(data.owner + '/' + data.repo);
+  }
+
+  function wireWaitlistForm(repoUrl) {
+    const wlForm = document.getElementById('waitlist-form');
+    const wlEmail = document.getElementById('waitlist-email');
+    const wlBtn = document.getElementById('waitlist-btn');
+    const wlMsg = document.getElementById('waitlist-msg');
+    if (!wlForm) return;
+
+    wlForm.addEventListener('submit', async function (e) {
+      e.preventDefault();
+      wlMsg.style.display = 'none';
+      wlBtn.disabled = true;
+      wlBtn.textContent = 'Joining…';
+
+      try {
+        const res = await fetch('/api/waitlist', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ email: wlEmail.value, repoUrl: repoUrl }),
+        });
+        const data = await res.json();
+        if (!res.ok) {
+          throw new Error(data.error || 'Could not join the waitlist. Please try again.');
+        }
+        wlMsg.className = 'waitlist-msg ok';
+        wlMsg.textContent = "You're on the list — we'll email you when cost + uptime monitoring launches.";
+        wlMsg.style.display = 'block';
+        wlForm.style.display = 'none';
+      } catch (err) {
+        wlMsg.className = 'waitlist-msg err';
+        wlMsg.textContent = err.message || 'Something went wrong. Please try again.';
+        wlMsg.style.display = 'block';
+        wlBtn.disabled = false;
+        wlBtn.textContent = 'Join waitlist';
+      }
+    });
   }
 
   form.addEventListener('submit', async function (e) {

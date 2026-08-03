@@ -11,8 +11,13 @@ import { fetchDefaultBranch, fetchFiles, fetchTree, parseRepoUrl } from './githu
 import { runAllChecks, selectCandidateFiles } from './checks';
 import { computeScore, scoreToGrade } from './scoring';
 import { landingPage } from './pages';
-import type { Env, ScanResult } from './types';
+import type { Env, ScanResult, WaitlistEntry } from './types';
 import { ScanError } from './types';
+
+// Deliberately simple RFC-5322-ish check — good enough to reject typos and
+// junk, not trying to be a full email grammar validator for a pre-launch
+// waitlist. See CEO mandate: docs/ceo/vibecheck-godecision-cycle4.md.
+const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 
 const app = new Hono<{ Bindings: Env }>();
 
@@ -74,6 +79,45 @@ app.post('/api/scan', async c => {
     }
     console.error('Unhandled scan error:', err);
     return c.json({ error: 'Unexpected error while scanning. Please try again.' }, 500);
+  }
+});
+
+// ── Waitlist capture ─────────────────────────────────────────────────────────
+// "Cost + uptime monitoring, coming soon" signup shown after a scan completes.
+// This is a pre-paid-tier proxy signal (CEO mandate), not a production email
+// system — no double opt-in, no unsubscribe flow, just a KV write.
+app.post('/api/waitlist', async c => {
+  let body: { email?: string; repoUrl?: string };
+  try {
+    body = await c.req.json();
+  } catch {
+    return c.json({ error: 'Expected JSON body with an email field' }, 400);
+  }
+
+  const email = (body.email ?? '').trim().toLowerCase();
+  if (!EMAIL_RE.test(email)) {
+    return c.json({ error: 'Please enter a valid email address.' }, 400);
+  }
+
+  const entry: WaitlistEntry = {
+    repoUrl: (body.repoUrl ?? '').trim(),
+    scannedAt: new Date().toISOString(),
+  };
+
+  if (!c.env.WAITLIST) {
+    // No KV namespace bound yet (see wrangler.toml TODO) — most likely local
+    // dev before `wrangler kv:namespace create WAITLIST` has been run, or a
+    // pre-deploy dry run. No-op gracefully rather than 500ing on the user.
+    console.log('TODO: WAITLIST KV binding missing — would have stored:', email, entry);
+    return c.json({ ok: true, stored: false });
+  }
+
+  try {
+    await c.env.WAITLIST.put(`waitlist:${email}`, JSON.stringify(entry));
+    return c.json({ ok: true, stored: true });
+  } catch (err) {
+    console.error('Waitlist KV write failed:', err);
+    return c.json({ error: 'Could not save your email right now. Please try again.' }, 500);
   }
 });
 

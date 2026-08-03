@@ -4,6 +4,27 @@ compatibility_date = "2024-11-01"
 compatibility_flags = ["nodejs_compat"]
 
 # No D1/R2 for the MVP — stateless request/response scanner, nothing to persist yet.
+# One exception: a KV namespace for the waitlist signup (see below) — a single
+# write-mostly email list doesn't need a relational database or migrations.
+
+# Waitlist KV store for the "cost + uptime monitoring, coming soon" email
+# capture on the scan-results page (CEO mandate: see
+# docs/ceo/vibecheck-godecision-cycle4.md). KV is the simplest primitive that
+# fits: write-mostly key -> value, no queries, no joins.
+#
+# TODO(devops): before first real deploy, run
+#   wrangler kv:namespace create WAITLIST
+#   wrangler kv:namespace create WAITLIST --preview
+# and replace the placeholder ids below with the real ones. Local `wrangler
+# dev` works fine with placeholders (KV is simulated locally and never
+# touches Cloudflare's API); only `--remote` dev or `wrangler deploy` need
+# real ids. Even so, src/index.ts checks `c.env.WAITLIST` at runtime and
+# no-ops with a logged TODO if the binding is ever missing, so this can never
+# turn into a 500 for the user.
+[[kv_namespaces]]
+binding = "WAITLIST"
+id = "REPLACE_WITH_KV_NAMESPACE_ID"
+preview_id = "REPLACE_WITH_KV_PREVIEW_NAMESPACE_ID"
 
 [vars]
 ENVIRONMENT = "development"
