@@ -29,7 +29,9 @@
 #   LIMIT_WAIT_SECONDS=3600     # Wait on usage limit
 #   MAX_LOGS=200                # Max cycle logs to keep
 #   AUTO_LOOP_PROTECT_GITIGNORE=1
-#                               # Restore .gitignore if a cycle mutates it
+#                               # Revert .gitignore to last commit if a cycle
+#                               # leaves it uncommitted-dirty. Committed changes
+#                               # are left alone (they're in git history).
 # ============================================================
 
 set -euo pipefail
@@ -128,54 +130,33 @@ cleanup() {
     exit 0
 }
 
-snapshot_gitignore() {
-    if [ "$AUTO_LOOP_PROTECT_GITIGNORE" = "0" ]; then
-        echo ""
-        return
-    fi
-
-    local gitignore_file="$PROJECT_DIR/.gitignore"
-    local snapshot_file=""
-    if [ -f "$gitignore_file" ]; then
-        snapshot_file=$(mktemp)
-        cp "$gitignore_file" "$snapshot_file"
-    fi
-    echo "$snapshot_file"
-}
-
+# NOTE: this guard intentionally checks against the *committed* state (HEAD),
+# not a pre-cycle snapshot. A pre-cycle snapshot can't distinguish "the agent
+# committed a legitimate, reviewable .gitignore change this cycle" from
+# "the agent left a stray uncommitted edit" — it reverts both, which produced
+# a real bug: a legitimate committed fix (restoring the vibecheck project's
+# gitignore exception) got silently clobbered back to unstaged-modified after
+# every single cycle, forcing the same fix to be redone from scratch on
+# cycles #1136, #1142, and #1143 before this was diagnosed. Only uncommitted
+# drift relative to HEAD is guard-worthy; committed changes are already in
+# git history and reviewable there.
 restore_gitignore_if_changed() {
-    local snapshot_file="$1"
     if [ "$AUTO_LOOP_PROTECT_GITIGNORE" = "0" ]; then
-        [ -n "$snapshot_file" ] && rm -f "$snapshot_file"
         return
     fi
 
     local gitignore_file="$PROJECT_DIR/.gitignore"
-    local changed=0
+    local status
+    status=$(git -C "$PROJECT_DIR" status --porcelain -- .gitignore 2>/dev/null || true)
+    [ -z "$status" ] && return
 
-    if [ -f "$gitignore_file" ]; then
-        if [ -z "$snapshot_file" ] || [ ! -f "$snapshot_file" ]; then
-            changed=1
-        elif ! cmp -s "$gitignore_file" "$snapshot_file"; then
-            changed=1
-        fi
+    if git -C "$PROJECT_DIR" ls-files --error-unmatch .gitignore >/dev/null 2>&1; then
+        git -C "$PROJECT_DIR" checkout -- .gitignore
+        log_cycle "$loop_count" "GUARD" "Reverted uncommitted .gitignore drift to match last commit"
     else
-        if [ -n "$snapshot_file" ] && [ -f "$snapshot_file" ]; then
-            changed=1
-        fi
+        rm -f "$gitignore_file"
+        log_cycle "$loop_count" "GUARD" "Removed uncommitted, never-tracked .gitignore created mid-cycle"
     fi
-
-    if [ "$changed" -eq 1 ]; then
-        if [ -n "$snapshot_file" ] && [ -f "$snapshot_file" ]; then
-            cp "$snapshot_file" "$gitignore_file"
-            log_cycle "$loop_count" "GUARD" "Blocked cycle mutation of .gitignore and restored baseline"
-        else
-            rm -f "$gitignore_file"
-            log_cycle "$loop_count" "GUARD" "Blocked cycle-created .gitignore and removed it"
-        fi
-    fi
-
-    [ -n "$snapshot_file" ] && rm -f "$snapshot_file"
 }
 
 get_file_size_bytes() {
@@ -645,7 +626,6 @@ while true; do
 
     # Backup consensus before cycle
     backup_consensus
-    gitignore_snapshot=$(snapshot_gitignore)
 
     # Build prompt with consensus pre-injected
     PROMPT=$(cat "$PROMPT_FILE")
@@ -680,7 +660,7 @@ This is Cycle #$loop_count. Act decisively."
 
     # Clean up known malformed-redirection artifacts created by bad generated shell commands.
     cleanup_accidental_root_artifacts
-    restore_gitignore_if_changed "$gitignore_snapshot"
+    restore_gitignore_if_changed
 
     # Extract result fields for status classification
     extract_cycle_metadata
