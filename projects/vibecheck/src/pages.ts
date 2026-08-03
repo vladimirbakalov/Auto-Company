@@ -8,7 +8,7 @@ export function landingPage(): string {
 <meta charset="utf-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1" />
 <title>vibecheck — free security check for AI-generated apps</title>
-<meta name="description" content="Paste a public GitHub repo URL and get a free security-risk report for common vibe-coding mistakes: exposed secrets, missing RLS, permissive CORS, and more." />
+<meta name="description" content="Paste a public GitHub repo URL and get a free first-pass security check for common vibe-coding mistakes: hardcoded secrets, exposed .env files, permissive CORS, unguarded routes — plus a few platform-config flags. Not a replacement for your platform's own security tools." />
 <style>
   :root {
     --bg: #0b0d12;
@@ -126,7 +126,7 @@ export function landingPage(): string {
     <header class="hero">
       <div class="brand"><span class="brand-dot"></span> vibecheck</div>
       <h1>Is your AI-generated app safe to ship?</h1>
-      <p class="sub">Paste a public GitHub repo URL. We check for the mistakes that most often leak data from Lovable / Bolt / Replit / Cursor / v0 apps &mdash; free, no signup.</p>
+      <p class="sub">Paste a public GitHub repo URL for a fast first-pass check &mdash; the code-level mistakes that most often leak data from Lovable / Bolt / Replit / Cursor / v0 apps &mdash; free, no signup. Not a certified audit, and not a substitute for your platform's own security tools (e.g. Supabase's built-in Security Advisor).</p>
     </header>
 
     <div class="card">
@@ -142,7 +142,7 @@ export function landingPage(): string {
     </div>
 
     <footer>
-      Heuristic scan, not a certified audit. Built to catch the most common vibe-coding mistakes &mdash; hardcoded secrets, exposed .env files, missing Supabase RLS, permissive CORS, unguarded routes.
+      Heuristic scan, not a certified audit. Built to catch code-level mistakes your AI builder won't warn you about &mdash; hardcoded secrets, exposed .env files, permissive CORS, unguarded routes. Also flags a possible missing-RLS signal as a heuristic hint, but always check your platform's own security dashboard (e.g. Supabase Security Advisor) for the authoritative answer on that one.
     </footer>
   </div>
 
