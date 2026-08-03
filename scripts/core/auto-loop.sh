@@ -125,7 +125,12 @@ EOF
 
 cleanup() {
     log "=== Auto Loop Shutting Down (PID $$) ==="
-    rm -f "$PID_FILE"
+    # Only remove the lock if it's still ours: an unconditional rm here would
+    # delete a newer instance's lock out from under it if this process is a
+    # stale duplicate exiting after a start-up race.
+    if [ "$(cat "$PID_FILE" 2>/dev/null)" = "$$" ]; then
+        rm -f "$PID_FILE"
+    fi
     save_state "stopped"
     exit 0
 }
