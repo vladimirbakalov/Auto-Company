@@ -33130,6 +33130,20 @@ exports.PATTERN_RULES = [
         // non-secret use.
         build: () => /\bduffel_(?:test|live)_[A-Za-z0-9_\-=]{43}\b/g,
     },
+    {
+        id: "easypost-api-token",
+        description: "EasyPost API token",
+        // EZAK + 54 case-insensitive alphanumeric chars, exact length. Fixed
+        // prefix and body shape, no legitimate non-secret use.
+        build: () => /\bEZAK[A-Za-z0-9]{54}\b/g,
+    },
+    {
+        id: "easypost-test-api-token",
+        description: "EasyPost test API token",
+        // EZTK + 54 case-insensitive alphanumeric chars, exact length. Fixed
+        // prefix and body shape, no legitimate non-secret use.
+        build: () => /\bEZTK[A-Za-z0-9]{54}\b/g,
+    },
 ];
 /**
  * Variable-name fragment that makes a high-entropy value worth flagging.
