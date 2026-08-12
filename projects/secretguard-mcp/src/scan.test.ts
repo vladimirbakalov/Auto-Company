@@ -504,6 +504,20 @@ describe("scanLine — true positives (known-leaked-secret patterns)", () => {
     expect(findings.some((f) => f.ruleId === "adobe-client-secret")).toBe(false);
   });
 
+  it("flags a 1Password Secret Key", () => {
+    const frag = "AB12CD34EF56";
+    const token = `A3-${frag.slice(0, 6)}-${frag.repeat(2).slice(0, 11)}-${frag.slice(0, 5)}-${frag.slice(0, 5)}-${frag.slice(0, 5)}`;
+    const findings = scanLine(line(`const OP_SECRET_KEY = "${token}";`));
+    expect(findings.some((f) => f.ruleId === "1password-secret-key" && f.confidence === "high")).toBe(true);
+  });
+
+  it("does not flag a 1Password-Secret-Key-shaped token that is one character short", () => {
+    const frag = "AB12CD34EF56";
+    const token = `A3-${frag.slice(0, 6)}-${frag.repeat(2).slice(0, 11)}-${frag.slice(0, 5)}-${frag.slice(0, 5)}-${frag.slice(0, 4)}`;
+    const findings = scanLine(line(`const OP_SECRET_KEY = "${token}";`));
+    expect(findings.some((f) => f.ruleId === "1password-secret-key")).toBe(false);
+  });
+
   it("flags a generic high-entropy value assigned to a secret-like variable name", () => {
     const findings = scanLine(line(`const apiToken = "zT9pQ2xR7mK4vL8nW1sD6fH3jC0bA5eY";`));
     expect(findings.some((f) => f.ruleId === "generic-high-entropy-secret" && f.confidence === "generic")).toBe(

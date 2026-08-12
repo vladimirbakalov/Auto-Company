@@ -404,6 +404,16 @@ export const PATTERN_RULES: PatternRule[] = [
     // stays case-sensitive here too.
     build: () => /\bp8e-[A-Za-z0-9]{32}\b/g,
   },
+  {
+    id: "1password-secret-key",
+    description: "1Password Secret Key",
+    // A3- + 6 uppercase-alnum + - + (11 uppercase-alnum, or 6+5 split by a
+    // dash) + - + three more 5-char uppercase-alnum groups. The short A3-
+    // prefix alone would be too generic, but the full 5/6-segment dashed
+    // structure is distinctive enough to stay high confidence.
+    build: () =>
+      /\bA3-[A-Z0-9]{6}-(?:[A-Z0-9]{11}|[A-Z0-9]{6}-[A-Z0-9]{5})-[A-Z0-9]{5}-[A-Z0-9]{5}-[A-Z0-9]{5}\b/g,
+  },
 ];
 
 /**
