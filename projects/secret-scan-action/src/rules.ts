@@ -203,6 +203,20 @@ export const PATTERN_RULES: PatternRule[] = [
     // ntn_ + 11 digits + 35 alphanumeric, fixed prefix and exact length.
     build: () => /\bntn_[0-9]{11}[A-Za-z0-9]{35}\b/g,
   },
+  {
+    id: "mailchimp-api-key",
+    description: "Mailchimp API key (contextual)",
+    // A bare 32-hex-char + "-usNN" datacenter suffix is too generic a shape to
+    // trust on its own (gitleaks' own rule gates it the same way), so this
+    // requires a "mailchimp"-prefixed variable/key name immediately before the
+    // assignment, mirroring the azure-storage-account-key /
+    // database-connection-string-password contextual style already in this
+    // file. Even with that gate the datacenter suffix alone doesn't rule out
+    // an unrelated hex value that happens to end in "-usNN", so this stays
+    // "generic" tier rather than "high".
+    build: () => /\bmailchimp[a-z0-9_.-]{0,20}\s*[:=]\s*["'`]?([a-f0-9]{32}-us\d{1,2})\b["'`]?/gi,
+    confidence: "generic",
+  },
 ];
 
 /**

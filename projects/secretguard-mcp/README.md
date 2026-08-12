@@ -4,7 +4,7 @@ An MCP (Model Context Protocol) server that scans a code string for
 hardcoded secrets — AWS keys, Stripe keys, GitHub tokens, Google API keys and
 OAuth client secrets, Slack tokens and incoming webhook URLs, Shopify access
 tokens, Telegram bot tokens, DigitalOcean tokens, Hugging Face tokens,
-Notion API tokens, OpenAI keys, Anthropic
+Notion API tokens, Mailchimp API keys, OpenAI keys, Anthropic
 keys, npm access tokens, SendGrid keys, Twilio API keys, Azure Storage
 account keys, database connection strings with embedded passwords, private
 key blocks, JWTs, and generic high-entropy credentials — so an AI coding
@@ -52,7 +52,12 @@ On a `scan_for_secrets` call:
      known placeholder passwords (`user`, `password`, `changeit`, ...) and
      `${...}`-style env-var references, since a real value there could still
      be a low-stakes tutorial example rather than a live credential; it's
-     returned at generic confidence, same as the entropy rule below.
+     returned at generic confidence, same as the entropy rule below. Another
+     pattern rule — Mailchimp API keys (a 32-char hex value followed by a
+     `-usNN` datacenter suffix) — is also generic confidence: it only fires
+     when a `mailchimp`-prefixed variable/key name immediately precedes the
+     value, but that keyword gate still doesn't rule out an unrelated hex
+     value that happens to end in the same suffix shape.
    - **Generic entropy rule** — a value assigned to a variable named like
      `secret`, `token`, `password`/`credential`, or a `*key` compound
      commonly used for real secret material (`apiKey`, `sessionKey`,

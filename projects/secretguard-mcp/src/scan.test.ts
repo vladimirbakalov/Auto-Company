@@ -188,6 +188,18 @@ describe("scanLine — true positives (known-leaked-secret patterns)", () => {
     expect(findings.some((f) => f.ruleId === "notion-api-token" && f.confidence === "high")).toBe(true);
   });
 
+  it("flags a Mailchimp API key when the variable name is mailchimp-prefixed", () => {
+    const key = `${"a1b2c3d4".repeat(4)}-us21`; // 32 hex + datacenter suffix
+    const findings = scanLine(line(`const MAILCHIMP_API_KEY = "${key}";`));
+    expect(findings.some((f) => f.ruleId === "mailchimp-api-key" && f.confidence === "generic")).toBe(true);
+  });
+
+  it("does not flag a mailchimp-shaped value with no mailchimp keyword nearby", () => {
+    const key = `${"a1b2c3d4".repeat(4)}-us21`; // same shape, no "mailchimp" prefix
+    const findings = scanLine(line(`const API_KEY = "${key}";`));
+    expect(findings.some((f) => f.ruleId === "mailchimp-api-key")).toBe(false);
+  });
+
   it("flags a generic high-entropy value assigned to a secret-like variable name", () => {
     const findings = scanLine(line(`const apiToken = "zT9pQ2xR7mK4vL8nW1sD6fH3jC0bA5eY";`));
     expect(findings.some((f) => f.ruleId === "generic-high-entropy-secret" && f.confidence === "generic")).toBe(
