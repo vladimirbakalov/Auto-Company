@@ -32975,6 +32975,16 @@ exports.PATTERN_RULES = [
         build: () => /\b(?:postgres(?:ql)?|mysql|mariadb|mongodb(?:\+srv)?|rediss?|amqps?):\/\/[A-Za-z0-9_.-]+:(?!(?:user|username|admin|root|guest|public|postgres|mysql|mariadb|pass|password|dbpassword|mypassword|yourpassword|changeit|changeme|test|example|placeholder|dummy|fake|sample|123456|12345678|letmein)@)([^@/\s'"{}$<>]{3,})@/gi,
         confidence: "generic",
     },
+    {
+        id: "slack-webhook-url",
+        description: "Slack incoming webhook URL",
+        // The URL itself is the full bearer credential — anyone with it can post
+        // messages to the channel it's bound to, no other secret required. Fixed
+        // hooks.slack.com/services/T.../B.../... shape has no legitimate
+        // non-secret use, so this is "high" confidence like the other
+        // fixed-format provider rules above.
+        build: () => /\bhttps:\/\/hooks\.slack\.com\/services\/T[A-Za-z0-9]{8,}\/B[A-Za-z0-9]{8,}\/[A-Za-z0-9]{20,}\b/g,
+    },
 ];
 /**
  * Variable-name fragment that makes a high-entropy value worth flagging.

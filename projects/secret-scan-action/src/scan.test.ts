@@ -130,6 +130,12 @@ describe("scanLine — true positives (known-leaked-secret patterns)", () => {
     ).toBe(true);
   });
 
+  it("flags a Slack incoming webhook URL", () => {
+    const url = `https://hooks.slack.com/services/T${"A".repeat(9)}/B${"B".repeat(9)}/${"c".repeat(24)}`;
+    const findings = scanLine(line(`const SLACK_WEBHOOK = "${url}";`));
+    expect(findings.some((f) => f.ruleId === "slack-webhook-url" && f.confidence === "high")).toBe(true);
+  });
+
   it("flags a generic high-entropy value assigned to a secret-like variable name", () => {
     const findings = scanLine(line(`const apiToken = "zT9pQ2xR7mK4vL8nW1sD6fH3jC0bA5eY";`));
     expect(findings.some((f) => f.ruleId === "generic-high-entropy-secret" && f.confidence === "generic")).toBe(

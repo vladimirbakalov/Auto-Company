@@ -2,9 +2,10 @@
 
 An MCP (Model Context Protocol) server that scans a code string for
 hardcoded secrets — AWS keys, Stripe keys, GitHub tokens, Google API keys and
-OAuth client secrets, Slack tokens, OpenAI keys, Anthropic keys, npm access
-tokens, SendGrid keys, Twilio API keys, Azure Storage account keys, database
-connection strings with embedded passwords, private key blocks, JWTs, and
+OAuth client secrets, Slack tokens and incoming webhook URLs, OpenAI keys,
+Anthropic keys, npm access tokens, SendGrid keys, Twilio API keys, Azure
+Storage account keys, database connection strings with embedded passwords,
+private key blocks, JWTs, and
 generic high-entropy credentials — so an AI coding agent (Claude Code, Cursor, Windsurf, ...) can catch a
 secret *before* it writes the file or makes the commit, instead of finding
 out at CI/PR-review time. It exposes exactly one tool, `scan_for_secrets`,
@@ -32,7 +33,8 @@ On a `scan_for_secrets` call:
      contextual secret keys, Stripe live keys (`sk_live_`, `rk_live_`),
      GitHub tokens (`ghp_`, `gho_`, `github_pat_`, ...), Google API keys
      (`AIza...`), Google OAuth client secrets (`GOCSPX-...`), Slack tokens
-     (`xox[baprs]-...`), OpenAI keys (`sk-...`, `sk-proj-...`,
+     (`xox[baprs]-...`), Slack incoming webhook URLs
+     (`hooks.slack.com/services/...`), OpenAI keys (`sk-...`, `sk-proj-...`,
      `sk-svcacct-...`), Anthropic keys (`sk-ant-...`), npm access tokens
      (`npm_...`), SendGrid keys (`SG....`), Twilio API keys (`SK...`), Azure
      Storage account keys (contextual `AccountKey=...`), private key blocks
