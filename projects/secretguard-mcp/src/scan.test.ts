@@ -490,6 +490,20 @@ describe("scanLine — true positives (known-leaked-secret patterns)", () => {
     expect(findings.some((f) => f.ruleId === "aws-amazon-bedrock-api-key-long-lived")).toBe(false);
   });
 
+  it("flags an Adobe Client Secret", () => {
+    const frag = "aB1cD2eF3gH4";
+    const token = `p8e-${frag.repeat(3).slice(0, 32)}`;
+    const findings = scanLine(line(`const ADOBE_CLIENT_SECRET = "${token}";`));
+    expect(findings.some((f) => f.ruleId === "adobe-client-secret" && f.confidence === "high")).toBe(true);
+  });
+
+  it("does not flag an Adobe-Client-Secret-shaped token that is one character short", () => {
+    const frag = "aB1cD2eF3gH4";
+    const token = `p8e-${frag.repeat(3).slice(0, 31)}`;
+    const findings = scanLine(line(`const ADOBE_CLIENT_SECRET = "${token}";`));
+    expect(findings.some((f) => f.ruleId === "adobe-client-secret")).toBe(false);
+  });
+
   it("flags a generic high-entropy value assigned to a secret-like variable name", () => {
     const findings = scanLine(line(`const apiToken = "zT9pQ2xR7mK4vL8nW1sD6fH3jC0bA5eY";`));
     expect(findings.some((f) => f.ruleId === "generic-high-entropy-secret" && f.confidence === "generic")).toBe(

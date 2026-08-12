@@ -33227,6 +33227,14 @@ exports.PATTERN_RULES = [
         // confidence despite the variable-length range.
         build: () => /\bABSK[A-Za-z0-9+/]{109,269}={0,2}\b/g,
     },
+    {
+        id: "adobe-client-secret",
+        description: "Adobe Client Secret",
+        // p8e- (case-sensitive) + 32 alnum chars (both cases). Upstream gitleaks
+        // scopes its (?i) flag to the body only, not the prefix, so the prefix
+        // stays case-sensitive here too.
+        build: () => /\bp8e-[A-Za-z0-9]{32}\b/g,
+    },
 ];
 /**
  * Variable-name fragment that makes a high-entropy value worth flagging.
