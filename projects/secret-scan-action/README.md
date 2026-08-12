@@ -52,6 +52,38 @@ On every `pull_request` event:
    exists. Generic-tier matches are shown but don't fail the check by
    default — set `fail-on: any` if you want them to.
 
+## Example output
+
+This is the comment the action posts when it finds something (built directly
+from the same template the code renders, so it's exact — not a mockup):
+
+> ## 🔒 Secret Scan
+>
+> Found **2** potential secrets in this PR's changed lines.
+>
+> ### 🚫 High confidence — blocks this check (1)
+>
+> | File | Line | Rule | Snippet |
+> |---|---|---|---|
+> | `src/config/aws.ts` | 14 | AWS Access Key ID | `const AWS_ACCESS_KEY_ID = 'AKIA************MPLE';` |
+>
+> ### ⚠️ Needs review — generic high-entropy match (1)
+>
+> _Already reviewed by Claude to cut obvious false positives — still worth a human look._
+>
+> | File | Line | Rule | Snippet |
+> |---|---|---|---|
+> | `src/lib/webhook-notify.ts` | 42 | High-entropy value assigned to "webhookKey" | `const webhookKey = 'wk9f****************6bA3';` |
+>
+> False positive? Add a pattern to `.secretscanignore` (or the `allowlist` input) matching the value, the line, or the file path.
+>
+> — flagged by secret-scan-action
+
+Every secret value shown is redacted (see [Security notes](#security-notes))
+— the raw AWS key above is AWS's own public documentation placeholder, not a
+live credential. When a PR is clean, the comment is a single line: "No
+secrets detected in this PR's changed lines. ✅"
+
 ## Setup
 
 Add the workflow — no repo secret required for the basic scan:
