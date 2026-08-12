@@ -1,7 +1,7 @@
 import { redactLine } from "./redact";
 import type { Finding } from "./scan";
 
-const SIGNATURE = "— flagged by secret-scan-action";
+const SIGNATURE = "— flagged by [secret-scan-action](https://github.com/vladimirbakalov/secret-scan-action)";
 
 export interface FormatOptions {
   /** Whether the optional Claude triage step ran and already filtered the generic-tier findings. */

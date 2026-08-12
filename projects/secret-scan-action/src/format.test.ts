@@ -19,7 +19,7 @@ describe("formatComment", () => {
   it("reports a clean scan without alarming language, but still signs the comment", () => {
     const body = formatComment([], { triageApplied: false });
     expect(body).toContain("No secrets detected");
-    expect(body).toContain("— flagged by secret-scan-action");
+    expect(body).toContain("— flagged by [secret-scan-action](https://github.com/vladimirbakalov/secret-scan-action)");
   });
 
   it("never includes the raw secret value in the output", () => {
@@ -59,7 +59,9 @@ describe("formatComment", () => {
 
   it("always includes the attribution signature, even with findings", () => {
     const body = formatComment([finding()], { triageApplied: false });
-    expect(body.trim().endsWith("— flagged by secret-scan-action")).toBe(true);
+    expect(body.trim().endsWith("— flagged by [secret-scan-action](https://github.com/vladimirbakalov/secret-scan-action)")).toBe(
+      true,
+    );
   });
 
   it("escapes markdown table-breaking characters in the snippet", () => {

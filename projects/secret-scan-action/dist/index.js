@@ -32694,7 +32694,7 @@ function extractAddedLines(files) {
 Object.defineProperty(exports, "__esModule", ({ value: true }));
 exports.formatComment = formatComment;
 const redact_1 = __nccwpck_require__(6670);
-const SIGNATURE = "— flagged by secret-scan-action";
+const SIGNATURE = "— flagged by [secret-scan-action](https://github.com/vladimirbakalov/secret-scan-action)";
 function formatComment(findings, options) {
     if (findings.length === 0) {
         return ["## 🔒 Secret Scan", "", "No secrets detected in this PR's changed lines. ✅", "", SIGNATURE].join("\n");
