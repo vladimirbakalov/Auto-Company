@@ -518,6 +518,24 @@ describe("scanLine — true positives (known-leaked-secret patterns)", () => {
     expect(findings.some((f) => f.ruleId === "1password-secret-key")).toBe(false);
   });
 
+  it("flags an Airtable Personal Access Token", () => {
+    const alnum14 = "aB3fD1".repeat(3).slice(0, 14);
+    const hex64 = "a1b2c3d4e5".repeat(7).slice(0, 64);
+    const token = `pat${alnum14}.${hex64}`;
+    const findings = scanLine(line(`const AIRTABLE_TOKEN = "${token}";`));
+    expect(findings.some((f) => f.ruleId === "airtable-personnal-access-token" && f.confidence === "high")).toBe(
+      true,
+    );
+  });
+
+  it("does not flag an Airtable-Personal-Access-Token-shaped value that is one character short", () => {
+    const alnum14 = "aB3fD1".repeat(3).slice(0, 14);
+    const hex64 = "a1b2c3d4e5".repeat(7).slice(0, 63);
+    const token = `pat${alnum14}.${hex64}`;
+    const findings = scanLine(line(`const AIRTABLE_TOKEN = "${token}";`));
+    expect(findings.some((f) => f.ruleId === "airtable-personnal-access-token")).toBe(false);
+  });
+
   it("flags a generic high-entropy value assigned to a secret-like variable name", () => {
     const findings = scanLine(line(`const apiToken = "zT9pQ2xR7mK4vL8nW1sD6fH3jC0bA5eY";`));
     expect(findings.some((f) => f.ruleId === "generic-high-entropy-secret" && f.confidence === "generic")).toBe(

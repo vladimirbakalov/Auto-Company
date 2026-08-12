@@ -414,6 +414,14 @@ export const PATTERN_RULES: PatternRule[] = [
     build: () =>
       /\bA3-[A-Z0-9]{6}-(?:[A-Z0-9]{11}|[A-Z0-9]{6}-[A-Z0-9]{5})-[A-Z0-9]{5}-[A-Z0-9]{5}-[A-Z0-9]{5}\b/g,
   },
+  {
+    id: "airtable-personnal-access-token",
+    description: "Airtable Personal Access Token",
+    // pat + 14 alnum + . + 64 hex chars. The bare "pat" prefix alone is a
+    // common short variable-name fragment, but the fixed-length dot-joined
+    // 64-hex suffix is distinctive enough to keep this high confidence.
+    build: () => /\bpat[A-Za-z0-9]{14}\.[a-f0-9]{64}\b/g,
+  },
 ];
 
 /**
