@@ -254,6 +254,18 @@ describe("scanLine — true positives (known-leaked-secret patterns)", () => {
     expect(findings.some((f) => f.ruleId === "rubygems-api-token")).toBe(false);
   });
 
+  it("flags a Doppler API token", () => {
+    const token = `dp.pt.${"a1B2c3D4e5".repeat(5).slice(0, 43)}`; // 43 alphanumeric chars
+    const findings = scanLine(line(`const DOPPLER_TOKEN = "${token}";`));
+    expect(findings.some((f) => f.ruleId === "doppler-api-token" && f.confidence === "high")).toBe(true);
+  });
+
+  it("does not flag a Doppler-shaped token whose body is one character short", () => {
+    const token = `dp.pt.${"a1B2c3D4e5".repeat(5).slice(0, 42)}`; // 42 alphanumeric chars
+    const findings = scanLine(line(`const DOPPLER_TOKEN = "${token}";`));
+    expect(findings.some((f) => f.ruleId === "doppler-api-token")).toBe(false);
+  });
+
   it("flags a generic high-entropy value assigned to a secret-like variable name", () => {
     const findings = scanLine(line(`const apiToken = "zT9pQ2xR7mK4vL8nW1sD6fH3jC0bA5eY";`));
     expect(findings.some((f) => f.ruleId === "generic-high-entropy-secret" && f.confidence === "generic")).toBe(

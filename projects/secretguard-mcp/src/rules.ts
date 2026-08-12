@@ -259,6 +259,13 @@ export const PATTERN_RULES: PatternRule[] = [
     // legitimate non-secret use of this shape.
     build: () => /\brubygems_[a-f0-9]{48}\b/g,
   },
+  {
+    id: "doppler-api-token",
+    description: "Doppler API token",
+    // dp.pt. + 43 case-insensitive alphanumeric chars, fixed prefix and
+    // exact length, no legitimate non-secret use of this shape.
+    build: () => /\bdp\.pt\.[a-zA-Z0-9]{43}\b/g,
+  },
 ];
 
 /**
