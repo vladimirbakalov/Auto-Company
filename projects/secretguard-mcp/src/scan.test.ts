@@ -206,6 +206,12 @@ describe("scanLine — true positives (known-leaked-secret patterns)", () => {
     expect(findings.some((f) => f.ruleId === "postman-api-token" && f.confidence === "high")).toBe(true);
   });
 
+  it("flags a Linear API key", () => {
+    const token = `lin_api_${"a1B2c3D4e5".repeat(4)}`; // 40 alphanumeric
+    const findings = scanLine(line(`const LINEAR_API_KEY = "${token}";`));
+    expect(findings.some((f) => f.ruleId === "linear-api-key" && f.confidence === "high")).toBe(true);
+  });
+
   it("flags a generic high-entropy value assigned to a secret-like variable name", () => {
     const findings = scanLine(line(`const apiToken = "zT9pQ2xR7mK4vL8nW1sD6fH3jC0bA5eY";`));
     expect(findings.some((f) => f.ruleId === "generic-high-entropy-secret" && f.confidence === "generic")).toBe(
@@ -246,6 +252,7 @@ describe("scanLine — no false positives on clean code", () => {
     `const modelId = "hf_${"a".repeat(33)}"`, // one letter short of a real Hugging Face token
     `const dbId = "ntn_${"1".repeat(11)}${"a".repeat(34)}"`, // one alnum char short of a real Notion token
     `const workspaceKey = "PMAK-${"a".repeat(23)}-${"b".repeat(34)}"`, // one hex char short of a real Postman token
+    `const teamKey = "lin_api_${"a".repeat(39)}"`, // one alnum char short of a real Linear API key
   ];
 
   it.each(cleanLines)("flags nothing for: %s", (content) => {

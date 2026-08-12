@@ -33055,6 +33055,13 @@ exports.PATTERN_RULES = [
         // legitimate non-secret use of this shape.
         build: () => /\bPMAK-[A-Fa-f0-9]{24}-[A-Fa-f0-9]{34}\b/g,
     },
+    {
+        id: "linear-api-key",
+        description: "Linear API key",
+        // lin_api_ + 40 alphanumeric chars, fixed prefix and exact length, no
+        // legitimate non-secret use of this shape.
+        build: () => /\blin_api_[A-Za-z0-9]{40}\b/g,
+    },
 ];
 /**
  * Variable-name fragment that makes a high-entropy value worth flagging.
