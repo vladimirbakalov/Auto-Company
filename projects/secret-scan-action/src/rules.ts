@@ -434,6 +434,20 @@ export const PATTERN_RULES: PatternRule[] = [
     build: () =>
       /\b(?:sc|ext|scauth|authress)_[A-Za-z0-9]{5,30}\.[A-Za-z0-9]{4,6}\.acc[_-][A-Za-z0-9-]{10,32}\.[A-Za-z0-9+/_=-]{30,120}\b/g,
   },
+  {
+    id: "clickhouse-cloud-api-secret-key",
+    description: "ClickHouse Cloud API secret key",
+    // Fixed 4-char literal prefix "4b1d" + exactly 38 alnum chars. Unlike the
+    // branded prefixes above (hf_, ntn_, PMAK-, ...), "4b1d" isn't a
+    // human-recognizable brand marker — it's four hex-range characters that
+    // could plausibly turn up as a substring inside an unrelated random
+    // hex/hash blob of the same rough length. That's real ambiguity even
+    // after the fixed-length shape match, so this stays "generic" tier
+    // (optional AI triage) rather than "high", unlike the other fixed-prefix
+    // rules in this file.
+    build: () => /\b4b1d[A-Za-z0-9]{38}\b/g,
+    confidence: "generic",
+  },
 ];
 
 /**

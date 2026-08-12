@@ -558,6 +558,22 @@ describe("scanLine — true positives (known-leaked-secret patterns)", () => {
     expect(findings.some((f) => f.ruleId === "authress-service-client-access-key")).toBe(false);
   });
 
+  it("flags a ClickHouse Cloud API secret key", () => {
+    const suffix = "aB3fD1x9Qz".repeat(4).slice(0, 38);
+    const token = `4b1d${suffix}`;
+    const findings = scanLine(line(`const CLICKHOUSE_KEY = "${token}";`));
+    expect(findings.some((f) => f.ruleId === "clickhouse-cloud-api-secret-key" && f.confidence === "generic")).toBe(
+      true,
+    );
+  });
+
+  it("does not flag a ClickHouse-Cloud-API-secret-key-shaped value that is one character short", () => {
+    const suffix = "aB3fD1x9Qz".repeat(4).slice(0, 37);
+    const token = `4b1d${suffix}`;
+    const findings = scanLine(line(`const CLICKHOUSE_KEY = "${token}";`));
+    expect(findings.some((f) => f.ruleId === "clickhouse-cloud-api-secret-key")).toBe(false);
+  });
+
   it("flags a generic high-entropy value assigned to a secret-like variable name", () => {
     const findings = scanLine(line(`const apiToken = "zT9pQ2xR7mK4vL8nW1sD6fH3jC0bA5eY";`));
     expect(findings.some((f) => f.ruleId === "generic-high-entropy-secret" && f.confidence === "generic")).toBe(
