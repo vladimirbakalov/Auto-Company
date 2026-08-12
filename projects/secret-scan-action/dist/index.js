@@ -32985,6 +32985,16 @@ exports.PATTERN_RULES = [
         // fixed-format provider rules above.
         build: () => /\bhttps:\/\/hooks\.slack\.com\/services\/T[A-Za-z0-9]{8,}\/B[A-Za-z0-9]{8,}\/[A-Za-z0-9]{20,}\b/g,
     },
+    {
+        id: "shopify-access-token",
+        description: "Shopify access token",
+        // shpat_ (public app), shpca_ (custom app), shpss_ (legacy private app
+        // shared secret), shppa_ (private app), shpua_ (undecided-listing app) —
+        // all fixed prefixes followed by a hex body. The body was originally 32
+        // hex chars; Shopify's own changelog documents it growing over time, so
+        // this matches {32,} rather than an exact count.
+        build: () => /\bshp(?:at|ca|ss|pa|ua)_[a-fA-F0-9]{32,}\b/g,
+    },
 ];
 /**
  * Variable-name fragment that makes a high-entropy value worth flagging.

@@ -31,10 +31,12 @@ On every `pull_request` event:
      GitHub tokens (`ghp_`, `gho_`, `github_pat_`, ...), Google API keys
      (`AIza...`), Google OAuth client secrets (`GOCSPX-...`), Slack tokens
      (`xox[baprs]-...`), Slack incoming webhook URLs
-     (`hooks.slack.com/services/...`), OpenAI keys (`sk-...`, `sk-proj-...`,
-     `sk-svcacct-...`), Anthropic keys (`sk-ant-...`), npm access tokens
-     (`npm_...`), SendGrid keys (`SG....`), Twilio API keys (`SK...`), Azure
-     Storage account keys (contextual `AccountKey=...`), private key blocks
+     (`hooks.slack.com/services/...`), Shopify access tokens (`shpat_...`,
+     `shpca_...`, `shpss_...`, `shppa_...`, `shpua_...`), OpenAI keys
+     (`sk-...`, `sk-proj-...`, `sk-svcacct-...`), Anthropic keys
+     (`sk-ant-...`), npm access tokens (`npm_...`), SendGrid keys (`SG....`),
+     Twilio API keys (`SK...`), Azure Storage account keys (contextual
+     `AccountKey=...`), private key blocks
      (`-----BEGIN ... PRIVATE KEY-----`), and JWTs. One pattern rule —
      database connection strings with an embedded password
      (`postgres://`, `mysql://`, `mongodb(+srv)://`, `redis(s)://`,

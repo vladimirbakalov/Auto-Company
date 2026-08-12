@@ -136,6 +136,18 @@ describe("scanLine — true positives (known-leaked-secret patterns)", () => {
     expect(findings.some((f) => f.ruleId === "slack-webhook-url" && f.confidence === "high")).toBe(true);
   });
 
+  it("flags a Shopify admin API access token", () => {
+    const token = `shpat_${"a1b2c3d4".repeat(4)}`;
+    const findings = scanLine(line(`const SHOPIFY_ACCESS_TOKEN = "${token}";`));
+    expect(findings.some((f) => f.ruleId === "shopify-access-token" && f.confidence === "high")).toBe(true);
+  });
+
+  it("flags a Shopify custom app access token", () => {
+    const token = `shpca_${"f0e1d2c3".repeat(4)}`;
+    const findings = scanLine(line(`headers["X-Shopify-Access-Token"] = "${token}"`));
+    expect(findings.some((f) => f.ruleId === "shopify-access-token" && f.confidence === "high")).toBe(true);
+  });
+
   it("flags a generic high-entropy value assigned to a secret-like variable name", () => {
     const findings = scanLine(line(`const apiToken = "zT9pQ2xR7mK4vL8nW1sD6fH3jC0bA5eY";`));
     expect(findings.some((f) => f.ruleId === "generic-high-entropy-secret" && f.confidence === "generic")).toBe(
