@@ -374,6 +374,18 @@ describe("scanLine — true positives (known-leaked-secret patterns)", () => {
     expect(findings.some((f) => f.ruleId === "infracost-api-token")).toBe(false);
   });
 
+  it("flags a GitLab Personal Access Token", () => {
+    const token = `glpat-${"aB1cD2eF3".repeat(3).slice(0, 20)}`;
+    const findings = scanLine(line(`const GITLAB_TOKEN = "${token}";`));
+    expect(findings.some((f) => f.ruleId === "gitlab-pat" && f.confidence === "high")).toBe(true);
+  });
+
+  it("does not flag a GitLab-PAT-shaped token that is one character short", () => {
+    const token = `glpat-${"aB1cD2eF3".repeat(3).slice(0, 19)}`;
+    const findings = scanLine(line(`const GITLAB_TOKEN = "${token}";`));
+    expect(findings.some((f) => f.ruleId === "gitlab-pat")).toBe(false);
+  });
+
   it("flags a generic high-entropy value assigned to a secret-like variable name", () => {
     const findings = scanLine(line(`const apiToken = "zT9pQ2xR7mK4vL8nW1sD6fH3jC0bA5eY";`));
     expect(findings.some((f) => f.ruleId === "generic-high-entropy-secret" && f.confidence === "generic")).toBe(

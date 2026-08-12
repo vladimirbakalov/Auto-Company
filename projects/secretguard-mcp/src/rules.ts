@@ -328,6 +328,13 @@ export const PATTERN_RULES: PatternRule[] = [
     // prefix and body shape, no legitimate non-secret use.
     build: () => /\bico-[A-Za-z0-9]{32}\b/g,
   },
+  {
+    id: "gitlab-pat",
+    description: "GitLab Personal Access Token",
+    // glpat- + 20 word/hyphen chars, exact length. Fixed prefix and body
+    // shape, no legitimate non-secret use.
+    build: () => /\bglpat-[\w-]{20}\b/g,
+  },
 ];
 
 /**
