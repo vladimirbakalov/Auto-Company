@@ -33107,6 +33107,14 @@ exports.PATTERN_RULES = [
         // above.
         build: () => /\bpscale_tkn_[\w.=-]{32,64}\b/g,
     },
+    {
+        id: "databricks-api-token",
+        description: "Databricks API token",
+        // dapi + 32 lowercase-hex chars, with an optional -N numeric suffix
+        // some Databricks tokens carry. Fixed prefix and body shape, no
+        // legitimate non-secret use.
+        build: () => /\bdapi[a-f0-9]{32}(?:-\d)?\b/g,
+    },
 ];
 /**
  * Variable-name fragment that makes a high-entropy value worth flagging.
