@@ -33218,6 +33218,15 @@ exports.PATTERN_RULES = [
         // distinctive even though "v1.0-" alone isn't.
         build: () => /\bv1\.0-[a-f0-9]{24}-[a-f0-9]{146}\b/g,
     },
+    {
+        id: "aws-amazon-bedrock-api-key-long-lived",
+        description: "AWS Amazon Bedrock long-lived API key",
+        // ABSK + 109-269 base64ish chars + up to 2 trailing '=' padding chars
+        // (mirrors gitleaks' own {109,269} bound). Fixed prefix and very long
+        // minimum body length make this distinctive enough to stay high
+        // confidence despite the variable-length range.
+        build: () => /\bABSK[A-Za-z0-9+/]{109,269}={0,2}\b/g,
+    },
 ];
 /**
  * Variable-name fragment that makes a high-entropy value worth flagging.

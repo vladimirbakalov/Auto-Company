@@ -474,6 +474,22 @@ describe("scanLine — true positives (known-leaked-secret patterns)", () => {
     expect(findings.some((f) => f.ruleId === "cloudflare-origin-ca-key")).toBe(false);
   });
 
+  it("flags an Amazon Bedrock long-lived API key", () => {
+    const frag = "aB1cD2eF3gH4";
+    const token = `ABSK${frag.repeat(10).slice(0, 109)}`;
+    const findings = scanLine(line(`const BEDROCK_API_KEY = "${token}";`));
+    expect(
+      findings.some((f) => f.ruleId === "aws-amazon-bedrock-api-key-long-lived" && f.confidence === "high"),
+    ).toBe(true);
+  });
+
+  it("does not flag an Amazon-Bedrock-API-key-shaped token that is one character short", () => {
+    const frag = "aB1cD2eF3gH4";
+    const token = `ABSK${frag.repeat(10).slice(0, 108)}`;
+    const findings = scanLine(line(`const BEDROCK_API_KEY = "${token}";`));
+    expect(findings.some((f) => f.ruleId === "aws-amazon-bedrock-api-key-long-lived")).toBe(false);
+  });
+
   it("flags a generic high-entropy value assigned to a secret-like variable name", () => {
     const findings = scanLine(line(`const apiToken = "zT9pQ2xR7mK4vL8nW1sD6fH3jC0bA5eY";`));
     expect(findings.some((f) => f.ruleId === "generic-high-entropy-secret" && f.confidence === "generic")).toBe(
