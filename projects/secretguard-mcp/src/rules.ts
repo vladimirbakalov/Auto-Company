@@ -252,6 +252,13 @@ export const PATTERN_RULES: PatternRule[] = [
     // legitimate non-secret use of this shape.
     build: () => /\bpul-[a-f0-9]{40}\b/g,
   },
+  {
+    id: "rubygems-api-token",
+    description: "RubyGems API token",
+    // rubygems_ + 48 lowercase-hex chars, fixed prefix and exact length, no
+    // legitimate non-secret use of this shape.
+    build: () => /\brubygems_[a-f0-9]{48}\b/g,
+  },
 ];
 
 /**
