@@ -1,0 +1,13 @@
+# Smithery configuration file: https://smithery.ai/docs/config#smitheryyaml
+
+startCommand:
+  type: stdio
+  configSchema:
+    # secretguard-mcp needs no configuration — it runs entirely locally,
+    # requires no API key, and every scan_for_secrets call is self-contained.
+    type: object
+    required: []
+    properties: {}
+  commandFunction:
+    |-
+    (config) => ({ command: 'node', args: ['dist/index.js'] })

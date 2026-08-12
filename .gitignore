@@ -156,6 +156,9 @@ projects/*
 # secret-scan-action is also a JS GitHub Action — same dist/ exception as above.
 !projects/secret-scan-action/dist/
 !projects/secret-scan-action/dist/**
+!projects/secretguard-mcp/
+# secretguard-mcp is an npm package (installed via npx) — dist/ is built at
+# publish time via prepublishOnly, not committed, so no dist/ exception here.
 
 # Local/private outputs (do not publish)
 AGENTS.md

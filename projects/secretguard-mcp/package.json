@@ -1,0 +1,49 @@
+{
+  "name": "secretguard-mcp",
+  "version": "0.1.0",
+  "description": "MCP server that scans code for hardcoded secrets (AWS/Stripe/GitHub/Google/Slack keys, private keys, JWTs, generic high-entropy credentials) before an AI coding agent writes or commits it.",
+  "private": false,
+  "license": "MIT",
+  "type": "module",
+  "bin": {
+    "secretguard-mcp": "dist/index.js"
+  },
+  "files": [
+    "dist"
+  ],
+  "scripts": {
+    "typecheck": "tsc --noEmit",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "build": "tsc -p tsconfig.build.json",
+    "prepare": "npm run build"
+  },
+  "dependencies": {
+    "@modelcontextprotocol/sdk": "^1.30.0",
+    "zod": "^3.25.0"
+  },
+  "devDependencies": {
+    "@types/node": "^20.19.41",
+    "typescript": "^5.7.3",
+    "vitest": "^4.1.10"
+  },
+  "keywords": [
+    "mcp",
+    "mcp-server",
+    "model-context-protocol",
+    "security",
+    "secrets",
+    "secret-scanning",
+    "secret-detection",
+    "claude-code",
+    "cursor",
+    "ai-coding-agent"
+  ],
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/vladimirbakalov/secretguard-mcp.git"
+  },
+  "engines": {
+    "node": ">=18"
+  }
+}
