@@ -1,7 +1,7 @@
 {
   "name": "secret-scan-action",
   "version": "0.1.0",
-  "description": "A free GitHub Action that scans PR diffs for leaked secrets (AWS/Stripe/GitHub/Google/Slack/OpenAI/Anthropic/npm/SendGrid/Twilio/Azure keys, private keys, JWTs, and generic high-entropy credentials) and fails the check on confirmed hits. Optional BYOK Claude triage cuts noise on ambiguous matches.",
+  "description": "A free GitHub Action that scans PR diffs for leaked secrets (AWS/Stripe/GitHub/Google/Slack/OpenAI/Anthropic/npm/SendGrid/Twilio/Azure keys, DB connection-string passwords, private keys, JWTs, and generic high-entropy credentials) and fails the check on confirmed hits. Optional BYOK Claude triage cuts noise on ambiguous matches.",
   "private": true,
   "license": "MIT",
   "type": "commonjs",

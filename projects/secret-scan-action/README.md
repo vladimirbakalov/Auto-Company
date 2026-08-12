@@ -3,8 +3,9 @@
 A free GitHub Action that scans a pull request's **changed lines only** for
 leaked secrets — AWS keys, Stripe keys, GitHub tokens, Google API keys and
 OAuth client secrets, Slack tokens, OpenAI keys, Anthropic keys, npm access
-tokens, SendGrid keys, Twilio API keys, Azure Storage account keys, private
-key blocks, JWTs, and generic high-entropy credentials — and
+tokens, SendGrid keys, Twilio API keys, Azure Storage account keys, database
+connection strings with embedded passwords, private key blocks, JWTs, and
+generic high-entropy credentials — and
 fails the check when it finds a confirmed one. It works out of the box with
 zero configuration and no API key. Optionally, bring your own Anthropic API
 key to have Claude triage the small set of ambiguous matches and cut noise.
@@ -33,7 +34,14 @@ On every `pull_request` event:
      `sk-svcacct-...`), Anthropic keys (`sk-ant-...`), npm access tokens
      (`npm_...`), SendGrid keys (`SG....`), Twilio API keys (`SK...`), Azure
      Storage account keys (contextual `AccountKey=...`), private key blocks
-     (`-----BEGIN ... PRIVATE KEY-----`), and JWTs.
+     (`-----BEGIN ... PRIVATE KEY-----`), and JWTs. One pattern rule —
+     database connection strings with an embedded password
+     (`postgres://`, `mysql://`, `mongodb(+srv)://`, `redis(s)://`,
+     `amqp(s)://`) — is deliberately *not* near-certain even after excluding
+     known placeholder passwords (`user`, `password`, `changeit`, ...) and
+     `${...}`-style env-var references, since a real value there could still
+     be a low-stakes tutorial example rather than a live credential; it's
+     reported at generic confidence, same as the entropy rule below.
    - **Generic entropy rule** — a value assigned to a variable named like
      `secret`, `token`, `password`/`credential`, or a `*key` compound
      commonly used for real secret material (`apiKey`, `sessionKey`,
@@ -42,15 +50,17 @@ On every `pull_request` event:
      placeholder or an env-var reference). Deliberately does *not* match a
      bare `*Key` — that would also catch `partitionKey`, `cacheKey`,
      `queryKey`, and similar non-secret identifiers that are common in
-     ordinary code. This is the only tier that's genuinely ambiguous — even
-     with the name gate, hashes, UUIDs, and test fixtures can trip it.
-3. **Optional BYOK triage**: if you set `anthropic-api-key`, the generic-tier
-   matches (and *only* those — pattern matches don't need a second opinion)
-   are sent to Claude, masked, for a real/false-positive judgment. Only the
-   value's length, entropy, variable name, and a masked context line are
-   sent — never the raw secret. If the call fails for any reason, every
-   generic match is reported unfiltered rather than silently dropped
-   (fail-safe, not fail-open).
+     ordinary code. This tier (plus the DB connection-string rule above) is
+     where ambiguity lives — even with the name gate, hashes, UUIDs, and
+     test fixtures can trip the entropy rule.
+3. **Optional BYOK triage**: if you set `anthropic-api-key`, every generic-tier
+   finding (the entropy rule's hits, plus the DB connection-string rule's —
+   near-certain pattern matches don't need a second opinion) is sent to
+   Claude, masked, for a real/false-positive judgment. Only the value's
+   length, entropy, variable name, and a masked context line are sent — never
+   the raw secret. If the call fails for any reason, every generic match is
+   reported unfiltered rather than silently dropped (fail-safe, not
+   fail-open).
 4. Posts (or updates) a single PR comment listing every finding — file, line,
    rule, and a redacted snippet — signed with a one-line attribution at the
    bottom.

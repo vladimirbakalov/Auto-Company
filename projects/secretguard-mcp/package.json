@@ -1,7 +1,7 @@
 {
   "name": "secretguard-mcp",
   "version": "0.1.0",
-  "description": "MCP server that scans code for hardcoded secrets (AWS/Stripe/GitHub/Google/Slack/OpenAI/Anthropic/npm/SendGrid/Twilio/Azure keys, private keys, JWTs, generic high-entropy credentials) before an AI coding agent writes or commits it.",
+  "description": "MCP server that scans code for hardcoded secrets (AWS/Stripe/GitHub/Google/Slack/OpenAI/Anthropic/npm/SendGrid/Twilio/Azure keys, DB connection-string passwords, private keys, JWTs, generic high-entropy credentials) before an AI coding agent writes or commits it.",
   "private": false,
   "license": "MIT",
   "type": "module",

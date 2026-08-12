@@ -20,6 +20,17 @@ export interface PatternRule {
   description: string;
   /** Must NOT have the "g" flag pre-set here — callers create a fresh RegExp per scan to avoid shared lastIndex state. */
   build(): RegExp;
+  /**
+   * Confidence tier for this rule's findings. Defaults to "high" (near-certain
+   * match, never triaged) when omitted — that default covers every
+   * fixed-format provider token rule above, where a match IS the secret.
+   * Set to "generic" for a rule whose captured value, even after excluding
+   * known placeholders in the pattern itself, can still plausibly be a
+   * non-secret (e.g. a tutorial's example DB password) rather than a
+   * mis-shaped provider key. "generic" findings get the same optional Claude
+   * triage and non-blocking-by-default treatment as the entropy rule.
+   */
+  confidence?: Confidence;
 }
 
 export const PATTERN_RULES: PatternRule[] = [
@@ -116,6 +127,22 @@ export const PATTERN_RULES: PatternRule[] = [
     id: "azure-storage-account-key",
     description: "Azure Storage account key (contextual)",
     build: () => /\bAccountKey=([A-Za-z0-9+/]{86}==)/g,
+  },
+  {
+    id: "database-connection-string-password",
+    description: "Database connection string with embedded password (contextual)",
+    // Excludes a fixed list of common non-secret placeholder passwords via a
+    // negative lookahead (e.g. postgres://user:password@host is not flagged),
+    // and excludes ${...}/<...>/%{...} template-reference syntax by leaving
+    // those characters out of the capture class entirely — a var reference
+    // like postgres://user:${DB_PASSWORD}@host isn't a literal value to flag.
+    // Even after that filtering the surviving matches are still genuinely
+    // ambiguous (a real prod credential vs. a low-stakes tutorial example),
+    // which is why this is "generic" tier, not "high" — see the isPlaceholder
+    // note on Confidence above.
+    build: () =>
+      /\b(?:postgres(?:ql)?|mysql|mariadb|mongodb(?:\+srv)?|rediss?|amqps?):\/\/[A-Za-z0-9_.-]+:(?!(?:user|username|admin|root|guest|public|postgres|mysql|mariadb|pass|password|dbpassword|mypassword|yourpassword|changeit|changeme|test|example|placeholder|dummy|fake|sample|123456|12345678|letmein)@)([^@/\s'"{}$<>]{3,})@/gi,
+    confidence: "generic",
   },
 ];
 

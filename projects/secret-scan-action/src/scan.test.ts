@@ -116,6 +116,20 @@ describe("scanLine — true positives (known-leaked-secret patterns)", () => {
     expect(generic).toHaveLength(0);
   });
 
+  it("flags a database connection string with a plausible embedded password, as generic confidence", () => {
+    const findings = scanLine(line(`const DATABASE_URL = "postgres://admin:Tr0ub4dor&3xK9z@db.example.com:5432/prod";`));
+    const match = findings.find((f) => f.ruleId === "database-connection-string-password");
+    expect(match).toBeDefined();
+    expect(match?.confidence).toBe("generic");
+  });
+
+  it("flags a MongoDB connection string with a plausible embedded password", () => {
+    const findings = scanLine(line(`uri: "mongodb+srv://svc:kP3mZ9vLwQ7nR2sD@cluster0.example.mongodb.net/app"`));
+    expect(
+      findings.some((f) => f.ruleId === "database-connection-string-password" && f.confidence === "generic"),
+    ).toBe(true);
+  });
+
   it("flags a generic high-entropy value assigned to a secret-like variable name", () => {
     const findings = scanLine(line(`const apiToken = "zT9pQ2xR7mK4vL8nW1sD6fH3jC0bA5eY";`));
     expect(findings.some((f) => f.ruleId === "generic-high-entropy-secret" && f.confidence === "generic")).toBe(
@@ -145,6 +159,9 @@ describe("scanLine — no false positives on clean code", () => {
     `const description = "this line is just prose about a token and a password, nothing assigned";`,
     `const count = 42;`,
     `const shortId = "AKIA123";`, // too short to be a real AWS key ID
+    `const url = "postgres://user:password@localhost:5432/mydb";`, // placeholder password, not flagged
+    `const url = "mysql://root:changeit@127.0.0.1:3306/app";`, // placeholder password, not flagged
+    `const url = "postgres://user:\${DB_PASSWORD}@localhost:5432/mydb";`, // env-var reference, not a literal value
   ];
 
   it.each(cleanLines)("flags nothing for: %s", (content) => {

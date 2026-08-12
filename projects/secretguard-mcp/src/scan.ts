@@ -34,7 +34,7 @@ function runPatternRules(al: AddedLine): Finding[] {
         line: al.line,
         ruleId: rule.id,
         description: rule.description,
-        confidence: "high",
+        confidence: rule.confidence ?? "high",
         secret,
         contextLine: al.content,
       });

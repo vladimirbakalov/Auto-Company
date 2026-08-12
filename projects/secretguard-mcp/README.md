@@ -3,8 +3,9 @@
 An MCP (Model Context Protocol) server that scans a code string for
 hardcoded secrets — AWS keys, Stripe keys, GitHub tokens, Google API keys and
 OAuth client secrets, Slack tokens, OpenAI keys, Anthropic keys, npm access
-tokens, SendGrid keys, Twilio API keys, Azure Storage account keys, private
-key blocks, JWTs, and generic high-entropy credentials — so an AI coding agent (Claude Code, Cursor, Windsurf, ...) can catch a
+tokens, SendGrid keys, Twilio API keys, Azure Storage account keys, database
+connection strings with embedded passwords, private key blocks, JWTs, and
+generic high-entropy credentials — so an AI coding agent (Claude Code, Cursor, Windsurf, ...) can catch a
 secret *before* it writes the file or makes the commit, instead of finding
 out at CI/PR-review time. It exposes exactly one tool, `scan_for_secrets`,
 runs entirely locally over stdio, needs no API key, and never returns a raw
@@ -35,7 +36,14 @@ On a `scan_for_secrets` call:
      `sk-svcacct-...`), Anthropic keys (`sk-ant-...`), npm access tokens
      (`npm_...`), SendGrid keys (`SG....`), Twilio API keys (`SK...`), Azure
      Storage account keys (contextual `AccountKey=...`), private key blocks
-     (`-----BEGIN ... PRIVATE KEY-----`), and JWTs.
+     (`-----BEGIN ... PRIVATE KEY-----`), and JWTs. One pattern rule —
+     database connection strings with an embedded password
+     (`postgres://`, `mysql://`, `mongodb(+srv)://`, `redis(s)://`,
+     `amqp(s)://`) — is deliberately *not* near-certain even after excluding
+     known placeholder passwords (`user`, `password`, `changeit`, ...) and
+     `${...}`-style env-var references, since a real value there could still
+     be a low-stakes tutorial example rather than a live credential; it's
+     returned at generic confidence, same as the entropy rule below.
    - **Generic entropy rule** — a value assigned to a variable named like
      `secret`, `token`, `password`/`credential`, or a `*key` compound
      commonly used for real secret material (`apiKey`, `sessionKey`,
