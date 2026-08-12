@@ -33016,6 +33016,24 @@ exports.PATTERN_RULES = [
         // legitimate non-secret use of this exact shape.
         build: () => /\bdo[opr]_v1_[a-f0-9]{64}\b/g,
     },
+    {
+        id: "huggingface-access-token",
+        description: "Hugging Face access token",
+        // hf_ + 34 letters, fixed prefix and exact length, no legitimate
+        // non-secret use of this shape.
+        build: () => /\bhf_[A-Za-z]{34}\b/g,
+    },
+    {
+        id: "huggingface-organization-api-token",
+        description: "Hugging Face organization API token",
+        build: () => /\bapi_org_[A-Za-z]{34}\b/g,
+    },
+    {
+        id: "notion-api-token",
+        description: "Notion API token",
+        // ntn_ + 11 digits + 35 alphanumeric, fixed prefix and exact length.
+        build: () => /\bntn_[0-9]{11}[A-Za-z0-9]{35}\b/g,
+    },
 ];
 /**
  * Variable-name fragment that makes a high-entropy value worth flagging.

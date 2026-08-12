@@ -3,7 +3,8 @@
 An MCP (Model Context Protocol) server that scans a code string for
 hardcoded secrets — AWS keys, Stripe keys, GitHub tokens, Google API keys and
 OAuth client secrets, Slack tokens and incoming webhook URLs, Shopify access
-tokens, Telegram bot tokens, DigitalOcean tokens, OpenAI keys, Anthropic
+tokens, Telegram bot tokens, DigitalOcean tokens, Hugging Face tokens,
+Notion API tokens, OpenAI keys, Anthropic
 keys, npm access tokens, SendGrid keys, Twilio API keys, Azure Storage
 account keys, database connection strings with embedded passwords, private
 key blocks, JWTs, and generic high-entropy credentials — so an AI coding
@@ -38,7 +39,9 @@ On a `scan_for_secrets` call:
      (`hooks.slack.com/services/...`), Shopify access tokens (`shpat_...`,
      `shpca_...`, `shpss_...`, `shppa_...`, `shpua_...`), Telegram bot tokens
      (`<bot_id>:A...`, 35-char secret), DigitalOcean tokens (`dop_v1_...`,
-     `doo_v1_...`, `dor_v1_...`, 64-char hex), OpenAI keys (`sk-...`, `sk-proj-...`,
+     `doo_v1_...`, `dor_v1_...`, 64-char hex), Hugging Face tokens (`hf_...`,
+     `api_org_...`, 34-char alpha), Notion API tokens (`ntn_...`, 11 digits +
+     35 alphanumeric), OpenAI keys (`sk-...`, `sk-proj-...`,
      `sk-svcacct-...`), Anthropic keys (`sk-ant-...`), npm access tokens
      (`npm_...`), SendGrid keys (`SG....`), Twilio API keys (`SK...`), Azure
      Storage account keys (contextual `AccountKey=...`), private key blocks

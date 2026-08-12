@@ -168,6 +168,26 @@ describe("scanLine — true positives (known-leaked-secret patterns)", () => {
     expect(findings.some((f) => f.ruleId === "digitalocean-token" && f.secret === refreshToken)).toBe(true);
   });
 
+  it("flags a Hugging Face access token", () => {
+    const token = `hf_${"aBcDeFgHiJ".repeat(3)}wXyZ`; // 34 letters
+    const findings = scanLine(line(`const HF_TOKEN = "${token}";`));
+    expect(findings.some((f) => f.ruleId === "huggingface-access-token" && f.confidence === "high")).toBe(true);
+  });
+
+  it("flags a Hugging Face organization API token", () => {
+    const token = `api_org_${"aBcDeFgHiJ".repeat(3)}wXyZ`; // 34 letters
+    const findings = scanLine(line(`const HF_ORG_TOKEN = "${token}";`));
+    expect(findings.some((f) => f.ruleId === "huggingface-organization-api-token" && f.confidence === "high")).toBe(
+      true,
+    );
+  });
+
+  it("flags a Notion API token", () => {
+    const token = `ntn_${"1".repeat(11)}${"a1B2c3D4e5".repeat(3)}fGhIj`; // 11 digits + 35 alnum
+    const findings = scanLine(line(`const NOTION_TOKEN = "${token}";`));
+    expect(findings.some((f) => f.ruleId === "notion-api-token" && f.confidence === "high")).toBe(true);
+  });
+
   it("flags a generic high-entropy value assigned to a secret-like variable name", () => {
     const findings = scanLine(line(`const apiToken = "zT9pQ2xR7mK4vL8nW1sD6fH3jC0bA5eY";`));
     expect(findings.some((f) => f.ruleId === "generic-high-entropy-secret" && f.confidence === "generic")).toBe(
@@ -205,6 +225,8 @@ describe("scanLine — no false positives on clean code", () => {
     `const timestamp = "1699999999:BPtYgjmUhBel31iEl2hpChYgCfrL1spNxny";`, // right shape and length but secret doesn't start with 'A'
     `const schemaRef = "12345:AgencyIdentificationCodeContentTypeExtended";`, // digit:CamelCase identifier longer than the token shape — word boundary rules it out
     `const buildTag = "dop_v1_${"a".repeat(63)}"`, // one hex char short of a real DigitalOcean token
+    `const modelId = "hf_${"a".repeat(33)}"`, // one letter short of a real Hugging Face token
+    `const dbId = "ntn_${"1".repeat(11)}${"a".repeat(34)}"`, // one alnum char short of a real Notion token
   ];
 
   it.each(cleanLines)("flags nothing for: %s", (content) => {
