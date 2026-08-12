@@ -7,8 +7,15 @@
 // helpers (covered separately in test/liveChecks.test.ts).
 
 import { describe, it, expect, vi, afterEach } from 'vitest';
-import { app, scheduled, RECONCILIATION_CRON } from '../src/index';
-import type { Env, ScanResult } from '../src/types';
+import {
+  app,
+  scheduled,
+  RECONCILIATION_CRON,
+  SCAN_RATE_LIMIT,
+  PROBE_CHECK_RATE_LIMIT,
+  MONITORS_RATE_LIMIT,
+} from '../src/index';
+import type { Env, ScanResult, UserRow, MonitorRow } from '../src/types';
 
 function fakeScheduledEvent(cron: string): ScheduledEvent {
   return { cron, scheduledTime: Date.now(), type: 'scheduled', noRetry: () => {} } as unknown as ScheduledEvent;
@@ -36,6 +43,19 @@ function streamedResponse(body: string, init: { status?: number; headers?: Heade
     },
   });
   return new Response(stream, { status: init.status ?? 200, headers: init.headers });
+}
+
+// Minimal in-memory stand-in for the one KV surface checkRateLimit
+// (src/rateLimit.ts) actually uses (get/put) — same "fake the binding, not
+// the whole SDK" approach as the D1/Stripe mocks below.
+function createFakeKV(): KVNamespace {
+  const store = new Map<string, string>();
+  return {
+    get: async (key: string) => store.get(key) ?? null,
+    put: async (key: string, value: string) => {
+      store.set(key, value);
+    },
+  } as unknown as KVNamespace;
 }
 
 // A minimal, clean (no-findings) repo: one source file with no secrets, no
@@ -246,6 +266,240 @@ describe('POST /api/probe-check', () => {
     expect(res.status).toBe(200);
     const body = (await res.json()) as { reachable: boolean };
     expect(body.reachable).toBe(false);
+  });
+});
+
+// Coarse per-IP rate limiting (src/rateLimit.ts) — closes the KNOWN GAP
+// flagged above POST /api/probe-check in src/index.ts (QA cycle #1146).
+// Covers the three cases the task calls for: under-limit allows through,
+// over-limit returns 429, and a missing RATE_LIMIT binding gracefully
+// no-ops (the endpoint still works normally) — same graceful-degradation
+// contract as every other optional binding in this codebase.
+describe('POST /api/scan — rate limiting', () => {
+  const originalFetch = global.fetch;
+
+  afterEach(() => {
+    vi.restoreAllMocks();
+    global.fetch = originalFetch;
+  });
+
+  it('allows requests under the limit', async () => {
+    global.fetch = mockGithubAndProbe({});
+    const env = { RATE_LIMIT: createFakeKV() } as Env;
+
+    for (let i = 0; i < SCAN_RATE_LIMIT; i++) {
+      const res = await app.request(
+        '/api/scan',
+        {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json', 'CF-Connecting-IP': '1.1.1.1' },
+          body: JSON.stringify({ repoUrl: 'acme/widgets' }),
+        },
+        env
+      );
+      expect(res.status).toBe(200);
+    }
+  });
+
+  it('returns 429 once a single IP exceeds the limit within the window', async () => {
+    global.fetch = mockGithubAndProbe({});
+    const env = { RATE_LIMIT: createFakeKV() } as Env;
+    const request = () =>
+      app.request(
+        '/api/scan',
+        {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json', 'CF-Connecting-IP': '2.2.2.2' },
+          body: JSON.stringify({ repoUrl: 'acme/widgets' }),
+        },
+        env
+      );
+
+    for (let i = 0; i < SCAN_RATE_LIMIT; i++) {
+      expect((await request()).status).toBe(200);
+    }
+    const res = await request();
+    expect(res.status).toBe(429);
+    const body = (await res.json()) as { error: string };
+    expect(body.error).toContain('Too many requests');
+  });
+
+  it('does not throttle two different IPs against the same budget', async () => {
+    global.fetch = mockGithubAndProbe({});
+    const env = { RATE_LIMIT: createFakeKV() } as Env;
+    const requestFrom = (ip: string) =>
+      app.request(
+        '/api/scan',
+        {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json', 'CF-Connecting-IP': ip },
+          body: JSON.stringify({ repoUrl: 'acme/widgets' }),
+        },
+        env
+      );
+
+    for (let i = 0; i < SCAN_RATE_LIMIT; i++) {
+      expect((await requestFrom('3.3.3.3')).status).toBe(200);
+    }
+    expect((await requestFrom('3.3.3.3')).status).toBe(429);
+    // A different IP has its own untouched budget.
+    expect((await requestFrom('4.4.4.4')).status).toBe(200);
+  });
+
+  it('still works normally (no throttling) when the RATE_LIMIT binding is missing', async () => {
+    global.fetch = mockGithubAndProbe({});
+    for (let i = 0; i < SCAN_RATE_LIMIT + 5; i++) {
+      const res = await app.request(
+        '/api/scan',
+        {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json', 'CF-Connecting-IP': '5.5.5.5' },
+          body: JSON.stringify({ repoUrl: 'acme/widgets' }),
+        },
+        TEST_ENV
+      );
+      expect(res.status).toBe(200);
+    }
+  });
+});
+
+describe('POST /api/probe-check — rate limiting', () => {
+  const originalFetch = global.fetch;
+
+  afterEach(() => {
+    vi.restoreAllMocks();
+    global.fetch = originalFetch;
+  });
+
+  const probeRequest = (env: Env, ip: string) =>
+    app.request(
+      '/api/probe-check',
+      {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', 'CF-Connecting-IP': ip },
+        body: JSON.stringify({ url: 'https://myapp.example.com' }),
+      },
+      env
+    );
+
+  it('allows requests under the limit', async () => {
+    global.fetch = vi.fn(async () => streamedResponse('ok', { status: 200 })) as unknown as typeof fetch;
+    const env = { RATE_LIMIT: createFakeKV() } as Env;
+
+    for (let i = 0; i < PROBE_CHECK_RATE_LIMIT; i++) {
+      expect((await probeRequest(env, '6.6.6.6')).status).toBe(200);
+    }
+  });
+
+  it('returns 429 once the limit is exceeded', async () => {
+    global.fetch = vi.fn(async () => streamedResponse('ok', { status: 200 })) as unknown as typeof fetch;
+    const env = { RATE_LIMIT: createFakeKV() } as Env;
+
+    for (let i = 0; i < PROBE_CHECK_RATE_LIMIT; i++) {
+      expect((await probeRequest(env, '7.7.7.7')).status).toBe(200);
+    }
+    const res = await probeRequest(env, '7.7.7.7');
+    expect(res.status).toBe(429);
+    const body = (await res.json()) as { error: string };
+    expect(body.error).toContain('Too many requests');
+  });
+
+  it('still works normally when the RATE_LIMIT binding is missing', async () => {
+    global.fetch = vi.fn(async () => streamedResponse('ok', { status: 200 })) as unknown as typeof fetch;
+    for (let i = 0; i < PROBE_CHECK_RATE_LIMIT + 5; i++) {
+      expect((await probeRequest(TEST_ENV, '8.8.8.8')).status).toBe(200);
+    }
+  });
+});
+
+describe('POST /api/monitors — rate limiting', () => {
+  // Fake D1 that answers both requireAuth's user lookup and insertMonitor's
+  // INSERT ... RETURNING * without caring about bound params — same
+  // "branch on the SQL text, not real query semantics" shortcut as other
+  // hand-rolled D1 fakes in this suite; the rate-limit tests only need a
+  // deterministic 201-vs-429, not real persistence.
+  function fakeMonitorsDb(user: UserRow, monitorRow: MonitorRow): D1Database {
+    return {
+      prepare: (sql: string) => ({
+        bind: () => ({
+          first: async <T>() => {
+            if (sql.includes('FROM users')) return user as unknown as T;
+            if (sql.includes('INSERT INTO monitors')) return monitorRow as unknown as T;
+            return null as unknown as T;
+          },
+        }),
+      }),
+    } as unknown as D1Database;
+  }
+
+  const testUser: UserRow = {
+    id: 1,
+    email: 'user@example.com',
+    stripe_customer_id: null,
+    stripe_subscription_id: null,
+    subscription_status: 'active',
+    api_key_hash: 'irrelevant-fake-does-not-check-hash',
+    created_at: '2026-08-01T00:00:00.000Z',
+  };
+
+  const testMonitor: MonitorRow = {
+    id: 1,
+    user_id: 1,
+    url: 'https://myapp.example.com',
+    interval_seconds: 300,
+    next_check_at: '2026-08-12T00:05:00.000Z',
+    last_check_at: null,
+    last_status: null,
+    consecutive_failures: 0,
+    paused: 0,
+    created_at: '2026-08-12T00:00:00.000Z',
+  };
+
+  const monitorsRequest = (env: Env, ip: string) =>
+    app.request(
+      '/api/monitors',
+      {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'CF-Connecting-IP': ip,
+          Authorization: 'Bearer fake-api-key',
+        },
+        body: JSON.stringify({ url: 'https://myapp.example.com' }),
+      },
+      env
+    );
+
+  it('allows requests under the limit', async () => {
+    const env = { DB: fakeMonitorsDb(testUser, testMonitor), RATE_LIMIT: createFakeKV() } as Env;
+    for (let i = 0; i < MONITORS_RATE_LIMIT; i++) {
+      expect((await monitorsRequest(env, '9.9.9.9')).status).toBe(201);
+    }
+  });
+
+  it('returns 429 once the limit is exceeded, before ever touching auth/DB', async () => {
+    const db = fakeMonitorsDb(testUser, testMonitor);
+    const prepareSpy = vi.spyOn(db, 'prepare');
+    const env = { DB: db, RATE_LIMIT: createFakeKV() } as Env;
+
+    for (let i = 0; i < MONITORS_RATE_LIMIT; i++) {
+      expect((await monitorsRequest(env, '10.10.10.10')).status).toBe(201);
+    }
+    prepareSpy.mockClear();
+
+    const res = await monitorsRequest(env, '10.10.10.10');
+    expect(res.status).toBe(429);
+    const body = (await res.json()) as { error: string };
+    expect(body.error).toContain('Too many requests');
+    // Rejected before requireAuth/insertMonitor ever ran a query.
+    expect(prepareSpy).not.toHaveBeenCalled();
+  });
+
+  it('still works normally when the RATE_LIMIT binding is missing', async () => {
+    const env = { DB: fakeMonitorsDb(testUser, testMonitor) } as Env;
+    for (let i = 0; i < MONITORS_RATE_LIMIT + 5; i++) {
+      expect((await monitorsRequest(env, '11.11.11.11')).status).toBe(201);
+    }
   });
 });
 

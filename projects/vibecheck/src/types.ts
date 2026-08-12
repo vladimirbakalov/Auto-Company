@@ -15,6 +15,20 @@ export interface Env {
   // never breaks on a missing namespace.
   WAITLIST?: KVNamespace;
 
+  // Coarse per-IP rate-limit counters for the unauthenticated URL-probing/
+  // scanning endpoints (POST /api/scan, POST /api/probe-check, POST
+  // /api/monitors — see src/rateLimit.ts for the fixed-window design and
+  // src/index.ts's QA-cycle-#1146 comment for the gap this closes). Declared
+  // in wrangler.toml with a placeholder id — same graceful-degradation
+  // convention as WAITLIST above: created via `wrangler kv:namespace create
+  // RATE_LIMIT` before first deploy. Until then this binding is undefined at
+  // runtime; checkRateLimit() treats a missing binding as "always allow"
+  // rather than throwing, so local dev / dry-run never breaks on a missing
+  // namespace. A dedicated namespace rather than reusing WAITLIST because the
+  // two are semantically unrelated (a mailing list vs. abuse counters) and
+  // have very different write patterns (rare/durable vs. frequent/throwaway).
+  RATE_LIMIT?: KVNamespace;
+
   // Monitoring-tier D1 database: users, magic_links, monitors, checks, alerts
   // (docs/cto/vibecheck-monitoring-tier-adr.md §1/§6). Declared in
   // wrangler.toml with a placeholder id — same graceful-degradation

@@ -65,6 +65,31 @@ binding = "WAITLIST"
 id = "REPLACE_WITH_KV_NAMESPACE_ID"
 preview_id = "REPLACE_WITH_KV_PREVIEW_NAMESPACE_ID"
 
+# Coarse per-IP rate-limit counters for the unauthenticated URL-probing/
+# scanning endpoints (POST /api/scan, POST /api/probe-check, POST
+# /api/monitors — see src/rateLimit.ts). Closes the KNOWN GAP flagged above
+# POST /api/probe-check in src/index.ts (QA cycle #1146): none of those
+# routes were throttled, so a single IP could fire unlimited server-side
+# fetches. A dedicated namespace rather than reusing WAITLIST above — a
+# mailing list and abuse counters are unrelated data with very different
+# write patterns (rare/durable vs. frequent/throwaway, short TTL). Fixed-
+# window counters, not a queryable store, so KV (no migrations, no schema)
+# is still the right primitive.
+#
+# TODO(devops): before first real deploy, run
+#   wrangler kv:namespace create RATE_LIMIT
+#   wrangler kv:namespace create RATE_LIMIT --preview
+# and replace the placeholder ids below with the real ones. Local `wrangler
+# dev` works fine with placeholders (KV is simulated locally and never
+# touches Cloudflare's API); only `--remote` dev or `wrangler deploy` need
+# real ids. Even so, checkRateLimit() (src/rateLimit.ts) treats a missing
+# binding as "always allow" rather than throwing, so this can never turn
+# into a 500 or an availability regression for real traffic.
+[[kv_namespaces]]
+binding = "RATE_LIMIT"
+id = "REPLACE_WITH_KV_NAMESPACE_ID"
+preview_id = "REPLACE_WITH_KV_PREVIEW_NAMESPACE_ID"
+
 [vars]
 ENVIRONMENT = "development"
 # Optional: set GITHUB_TOKEN via `wrangler secret put GITHUB_TOKEN` to raise the

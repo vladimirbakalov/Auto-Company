@@ -24,6 +24,13 @@ import { landingPage } from './pages';
 import type { Env, ScanResult, UserRow, WaitlistEntry } from './types';
 import { ScanError } from './types';
 import { probeUrl, validateProbeTarget } from './probe';
+import { checkRateLimit, rateLimitKey } from './rateLimit';
+// Every rateLimitKey(...) call below reads only the `CF-Connecting-IP`
+// header, never `X-Forwarded-For` or any other client-settable header:
+// Cloudflare's edge strips/overwrites any client-supplied CF-Connecting-IP
+// before a proxied request reaches this Worker, so it isn't spoofable from
+// outside — X-Forwarded-For has no such guarantee and must not be added as
+// a fallback here, or the rate limiter becomes trivially bypassable.
 import { buildLiveFindings } from './liveChecks';
 import { detectTrafficAnomaly, evaluateUptimeTransition } from './anomaly';
 import {
@@ -60,6 +67,24 @@ const SESSION_COOKIE = 'vc_session';
 // waitlist. See CEO mandate: docs/ceo/vibecheck-godecision-cycle4.md.
 const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 
+// Coarse per-IP rate limits (src/rateLimit.ts) for the three unauthenticated
+// URL-probing/scanning endpoints — see the QA-cycle-#1146 comment above
+// POST /api/probe-check for the gap this closes. All three share one
+// 60-second window; the request budget itself is tuned per route below
+// (fixed-window counter, so "per minute" here is approximate, not exact —
+// see rateLimit.ts for why). 10/min comfortably covers a real user
+// iterating on a scan/probe/monitor while still bounding the server-side
+// fetches a single IP can trigger.
+// Exported (not just `const`) so tests can assert against the real numbers
+// instead of duplicating magic literals — same reasoning as
+// MONITOR_CHECK_CRON/RECONCILIATION_CRON below.
+export const RATE_LIMIT_WINDOW_SECONDS = 60;
+export const SCAN_RATE_LIMIT = 10;
+export const PROBE_CHECK_RATE_LIMIT = 10;
+export const MONITORS_RATE_LIMIT = 10;
+
+const RATE_LIMIT_ERROR = { error: 'Too many requests. Please wait a minute and try again.' } as const;
+
 const app = new Hono<{ Bindings: Env }>();
 
 function htmlResponse(html: string, status = 200): Response {
@@ -74,6 +99,16 @@ app.get('/', () => htmlResponse(landingPage()));
 
 // ── Scan API ─────────────────────────────────────────────────────────────────
 app.post('/api/scan', async c => {
+  const { allowed } = await checkRateLimit(
+    c.env.RATE_LIMIT,
+    rateLimitKey(c.req.header('CF-Connecting-IP'), 'scan'),
+    SCAN_RATE_LIMIT,
+    RATE_LIMIT_WINDOW_SECONDS
+  );
+  if (!allowed) {
+    return c.json(RATE_LIMIT_ERROR, 429);
+  }
+
   let body: { repoUrl?: string; deployedUrl?: string };
   try {
     body = await c.req.json();
@@ -160,14 +195,26 @@ app.post('/api/scan', async c => {
 // if the user supplied a deployedUrl there; this endpoint's only job is the
 // green/red "we can see it's live" moment from spec §3.4 step 2.
 //
-// KNOWN GAP (QA cycle #1146, not fixed this pass): this is unauthenticated
-// and unrate-limited, so it's a free reachability/latency oracle for any
-// target that clears validateProbeTarget. Same is true of POST /api/scan's
-// deployedUrl and POST /api/monitors' url, and there's no rate-limiting
-// anywhere in this codebase yet. Low urgency pre-deploy (no live traffic to
-// abuse), but should get a coarse per-IP throttle (e.g. KV-backed sliding
-// window, same binding style as WAITLIST) before/shortly after launch.
+// FORMERLY A KNOWN GAP (QA cycle #1146, deferred 2+ cycles, closed this
+// cycle): this endpoint is unauthenticated, so without a throttle it was a
+// free reachability/latency oracle for any target that clears
+// validateProbeTarget. Same was true of POST /api/scan's deployedUrl and
+// POST /api/monitors' url. All three now go through checkRateLimit
+// (src/rateLimit.ts) first — a coarse, KV-backed fixed-window counter per
+// (IP, route), same graceful-degradation binding style as WAITLIST. See
+// rateLimit.ts's module doc for the exact design and why "coarse" is
+// intentional, not a shortcut.
 app.post('/api/probe-check', async c => {
+  const { allowed } = await checkRateLimit(
+    c.env.RATE_LIMIT,
+    rateLimitKey(c.req.header('CF-Connecting-IP'), 'probe-check'),
+    PROBE_CHECK_RATE_LIMIT,
+    RATE_LIMIT_WINDOW_SECONDS
+  );
+  if (!allowed) {
+    return c.json(RATE_LIMIT_ERROR, 429);
+  }
+
   let body: { url?: string };
   try {
     body = await c.req.json();
@@ -309,6 +356,27 @@ app.post('/api/monitors', async c => {
   if (!c.env.DB) {
     console.log('TODO: DB binding missing — monitoring not available yet');
     return c.json({ error: 'Monitoring is not available yet.' }, 503);
+  }
+
+  // Rate-limited by IP ahead of auth (not just ahead of the DB write): this
+  // endpoint is auth-gated but not payment-verified (see the SSRF-guard
+  // comment below), so an unthrottled attacker could also use it to hammer
+  // requireAuth's API-key lookup. Checking here means a blocked caller never
+  // reaches that DB query either. Trade-off: the key is IP+route only, with
+  // no awareness of API key/auth state, so an unauthenticated attacker
+  // sharing an IP with a legitimate authenticated user (same NAT/corporate
+  // egress/CGNAT block) could burn that IP's budget with junk requests and
+  // lock the legitimate user out for the window. Requires the attacker to
+  // already share an IP with the target, so accepted as low-severity for a
+  // coarse, blunt-abuse throttle.
+  const { allowed } = await checkRateLimit(
+    c.env.RATE_LIMIT,
+    rateLimitKey(c.req.header('CF-Connecting-IP'), 'monitors'),
+    MONITORS_RATE_LIMIT,
+    RATE_LIMIT_WINDOW_SECONDS
+  );
+  if (!allowed) {
+    return c.json(RATE_LIMIT_ERROR, 429);
   }
 
   const user = await requireAuth(c);
