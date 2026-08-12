@@ -2,6 +2,7 @@ import { describe, it, expect, vi, afterEach } from 'vitest';
 import {
   verifyStripeSignature,
   createStripeGateway,
+  fetchActiveStripeCustomerIds,
   routeStripeEvent,
   type StripeWebhookEvent,
 } from '../src/stripe';
@@ -98,6 +99,80 @@ describe('createStripeGateway.createCheckoutSession', () => {
         cancelUrl: 'https://vibecheck.dev/cancel',
       })
     ).rejects.toThrow(/Stripe checkout session creation failed \(400\)/);
+  });
+});
+
+describe('fetchActiveStripeCustomerIds', () => {
+  afterEach(() => {
+    vi.restoreAllMocks();
+  });
+
+  function subscriptionListResponse(
+    customers: Array<{ id: string; customer: string }>,
+    hasMore = false
+  ): Response {
+    return new Response(JSON.stringify({ data: customers, has_more: hasMore }), {
+      status: 200,
+      headers: { 'content-type': 'application/json' },
+    });
+  }
+
+  it('queries both status=active and status=trialing with no creation-time filter, merging + deduping customer ids', async () => {
+    const seenUrls: string[] = [];
+    global.fetch = vi.fn(async (url: string, init?: RequestInit) => {
+      seenUrls.push(url);
+      expect(init?.headers).toMatchObject({ Authorization: 'Bearer sk_test_fake' });
+      if (url.includes('status=active')) {
+        return subscriptionListResponse([
+          { id: 'sub_1', customer: 'cus_A' },
+          { id: 'sub_2', customer: 'cus_B' },
+        ]);
+      }
+      if (url.includes('status=trialing')) {
+        return subscriptionListResponse([
+          { id: 'sub_3', customer: 'cus_B' },
+          { id: 'sub_4', customer: 'cus_C' },
+        ]);
+      }
+      throw new Error(`unexpected URL: ${url}`);
+    }) as unknown as typeof fetch;
+
+    const ids = await fetchActiveStripeCustomerIds('sk_test_fake');
+
+    expect(seenUrls).toHaveLength(2);
+    expect(seenUrls.every(u => !u.includes('created'))).toBe(true);
+    expect(new Set(ids)).toEqual(new Set(['cus_A', 'cus_B', 'cus_C']));
+  });
+
+  it('follows starting_after cursor pagination across multiple pages for a single status', async () => {
+    const seenUrls: string[] = [];
+    global.fetch = vi.fn(async (url: string) => {
+      seenUrls.push(url);
+      if (url.includes('status=trialing')) return subscriptionListResponse([]);
+      if (!url.includes('starting_after')) {
+        return subscriptionListResponse([{ id: 'sub_1', customer: 'cus_A' }], true);
+      }
+      expect(url).toContain('starting_after=sub_1');
+      return subscriptionListResponse([{ id: 'sub_2', customer: 'cus_B' }], false);
+    }) as unknown as typeof fetch;
+
+    const ids = await fetchActiveStripeCustomerIds('sk_test_fake');
+
+    expect(new Set(ids)).toEqual(new Set(['cus_A', 'cus_B']));
+    expect(seenUrls.filter(u => u.includes('status=active'))).toHaveLength(2);
+  });
+
+  it('throws with a readable message on a non-2xx Stripe response', async () => {
+    global.fetch = vi.fn(async () => new Response('server error', { status: 500 })) as unknown as typeof fetch;
+    await expect(fetchActiveStripeCustomerIds('sk_test_fake')).rejects.toThrow(
+      /Stripe subscription list \(status=(active|trialing)\) failed \(500\)/
+    );
+  });
+
+  it('returns an empty list when Stripe has no active or trialing subscriptions', async () => {
+    global.fetch = vi.fn(async () => subscriptionListResponse([])) as unknown as typeof fetch;
+    const ids = await fetchActiveStripeCustomerIds('sk_test_fake');
+    expect(ids).toEqual([]);
   });
 });
 

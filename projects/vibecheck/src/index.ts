@@ -50,7 +50,8 @@ import {
   createMagicLink,
   SESSION_TTL_MS,
 } from './auth';
-import { createStripeGateway, routeStripeEvent, type StripeWebhookEvent } from './stripe';
+import { createStripeGateway, fetchActiveStripeCustomerIds, routeStripeEvent, type StripeWebhookEvent } from './stripe';
+import { fetchKnownStripeCustomerIds, findReconciliationGap } from './reconcile';
 
 const SESSION_COOKIE = 'vc_session';
 
@@ -466,14 +467,80 @@ app.onError((err, c) => {
   return c.json({ error: 'Internal server error' }, 500);
 });
 
+// Cron schedule strings (wrangler.toml [triggers].crons) — kept as named
+// constants rather than inline literals so `scheduled` below and its tests
+// can't drift out of sync with wrangler.toml by a typo'd cron string.
+export const MONITOR_CHECK_CRON = '* * * * *';
+export const RECONCILIATION_CRON = '0 * * * *';
+
+// ── Cron Trigger: Stripe/D1 reconciliation safety net ───────────────────────
+// Fires hourly (RECONCILIATION_CRON, wrangler.toml [triggers]). Backstop for
+// critic-munger's pre-mortem finding (docs/critic/
+// vibecheck-monitoring-tier-premortem.md: "reconciliation-cron webhook
+// safety net") — POST /api/stripe/webhook above is the only thing that ever
+// creates a D1 `users` row from a Stripe payment, and a dropped/failed
+// webhook would otherwise leave a paying customer with no dashboard access
+// and nobody the wiser. Lists Stripe's own current view of active-or-trialing
+// subscriptions (stripe.ts, no creation-time filter — see that file for why)
+// and diffs it against D1's known customer ids (reconcile.ts) — any gap is
+// logged loudly. No-ops gracefully if STRIPE_SECRET_KEY or DB isn't bound,
+// same style as every other binding check in this file.
+async function runReconciliationCheck(env: Env): Promise<void> {
+  if (!env.STRIPE_SECRET_KEY) {
+    console.log('TODO: STRIPE_SECRET_KEY missing — reconciliation check skipped this tick');
+    return;
+  }
+  if (!env.DB) {
+    console.log('TODO: DB binding missing — reconciliation check skipped this tick');
+    return;
+  }
+
+  let stripeActiveCustomerIds: string[];
+  try {
+    stripeActiveCustomerIds = await fetchActiveStripeCustomerIds(env.STRIPE_SECRET_KEY);
+  } catch (err) {
+    console.error('Reconciliation check: failed to list active Stripe subscriptions', err);
+    return;
+  }
+  if (stripeActiveCustomerIds.length === 0) return;
+
+  let knownCustomerIds: Set<string>;
+  try {
+    knownCustomerIds = await fetchKnownStripeCustomerIds(env.DB);
+  } catch (err) {
+    console.error('Reconciliation check: failed to read known Stripe customer ids from D1', err);
+    return;
+  }
+  const gap = findReconciliationGap(stripeActiveCustomerIds, knownCustomerIds);
+
+  for (const stripeCustomerId of gap) {
+    // STUB: no alert channel is wired up yet (email/Slack — same
+    // not-yet-configured state as RESEND_API_KEY elsewhere in this file, see
+    // types.ts). This structured, greppable log line is the entire v1 alert
+    // until a real channel exists.
+    console.error('RECONCILIATION GAP: Stripe customer has active subscription but no D1 user row', {
+      stripeCustomerId,
+    });
+  }
+}
+
 // ── Cron Trigger: monitor due-queue polling + bounded fan-out (ADR §2) ──────
-// Fires every 1 minute (wrangler.toml [triggers]). Polls D1 for monitors due
-// for a check, probes each (bounded concurrency), records the check, updates
-// the monitor's next_check_at/consecutive_failures, and inserts alerts on
-// uptime state transitions (ADR §6 steps 5-7) and traffic anomalies (spec
-// §1.2). No-ops gracefully if DB isn't bound, same style as every other
-// binding check in this file.
-async function scheduled(_event: ScheduledEvent, env: Env, _ctx: ExecutionContext): Promise<void> {
+// Fires every 1 minute (MONITOR_CHECK_CRON, wrangler.toml [triggers]). Polls
+// D1 for monitors due for a check, probes each (bounded concurrency),
+// records the check, updates the monitor's next_check_at/
+// consecutive_failures, and inserts alerts on uptime state transitions (ADR
+// §6 steps 5-7) and traffic anomalies (spec §1.2). No-ops gracefully if DB
+// isn't bound, same style as every other binding check in this file.
+//
+// Cloudflare Workers feeds every cron in wrangler.toml's [triggers].crons
+// into this same `scheduled` export, distinguished by `event.cron` — branch
+// on it up front rather than splitting into two Worker exports.
+async function scheduled(event: ScheduledEvent, env: Env, _ctx: ExecutionContext): Promise<void> {
+  if (event.cron === RECONCILIATION_CRON) {
+    await runReconciliationCheck(env);
+    return;
+  }
+
   const db = env.DB;
   if (!db) {
     console.log('TODO: DB binding missing — scheduled monitor checks skipped this tick');
@@ -540,8 +607,10 @@ async function scheduled(_event: ScheduledEvent, env: Env, _ctx: ExecutionContex
 
 // Exported for tests (Hono apps support `.request()` directly, no server
 // needed — see test/index.test.ts) — the default export below is what
-// wrangler actually loads.
-export { app };
+// wrangler actually loads. `scheduled` is exported too so tests can invoke
+// the cron handler directly with a fake ScheduledEvent (see
+// test/index.test.ts's reconciliation-cron coverage).
+export { app, scheduled };
 
 export default {
   fetch: app.fetch,

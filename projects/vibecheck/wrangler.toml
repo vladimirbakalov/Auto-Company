@@ -21,13 +21,30 @@ binding = "DB"
 database_name = "vibecheck-db"
 database_id = "REPLACE_WITH_D1_DATABASE_ID"
 
-# Cron Trigger driving the `scheduled` handler in src/index.ts: polls D1 for
-# monitors due for a check (next_check_at <= now, paused = 0, active
-# subscription) and fans out probes. 1-minute tick per ADR §2 — cost scales
-# with ticks, not monitors, up to the per-tick LIMIT. No-ops gracefully if
-# c.env.DB is missing (same graceful-degradation style as WAITLIST).
+# Two Cron Triggers, both feeding the same `scheduled` handler in
+# src/index.ts — Cloudflare Workers dispatches every entry in this array to
+# that one export, and the handler branches on `event.cron` to tell them
+# apart (see MONITOR_CHECK_CRON / RECONCILIATION_CRON in src/index.ts).
+#
+# 1. "* * * * *" (every minute): polls D1 for monitors due for a check
+#    (next_check_at <= now, paused = 0, active subscription) and fans out
+#    probes. 1-minute tick per ADR §2 — cost scales with ticks, not
+#    monitors, up to the per-tick LIMIT. No-ops gracefully if c.env.DB is
+#    missing (same graceful-degradation style as WAITLIST).
+#
+# 2. "0 * * * *" (top of every hour): the Stripe/D1 reconciliation safety
+#    net (critic-munger pre-mortem: "reconciliation-cron webhook safety
+#    net" — docs/critic/vibecheck-monitoring-tier-premortem.md). Lists
+#    Stripe's own current active-or-trialing subscriptions (no creation-time
+#    filter — see fetchStripeSubscriptionCustomerIds in src/stripe.ts for why
+#    that would silently miss delayed status transitions) and flags any
+#    customer id with no matching D1 `users` row — the signature of a
+#    webhook that silently failed. Hourly is plenty for a safety net (this is
+#    not the primary provisioning path, POST /api/stripe/webhook is). No-ops
+#    gracefully if c.env.STRIPE_SECRET_KEY or
+#    c.env.DB is missing.
 [triggers]
-crons = ["* * * * *"]
+crons = ["* * * * *", "0 * * * *"]
 
 # Waitlist KV store for the "cost + uptime monitoring, coming soon" email
 # capture on the scan-results page (CEO mandate: see

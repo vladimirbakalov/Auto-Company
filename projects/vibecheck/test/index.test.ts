@@ -7,8 +7,16 @@
 // helpers (covered separately in test/liveChecks.test.ts).
 
 import { describe, it, expect, vi, afterEach } from 'vitest';
-import { app } from '../src/index';
+import { app, scheduled, RECONCILIATION_CRON } from '../src/index';
 import type { Env, ScanResult } from '../src/types';
+
+function fakeScheduledEvent(cron: string): ScheduledEvent {
+  return { cron, scheduledTime: Date.now(), type: 'scheduled', noRetry: () => {} } as unknown as ScheduledEvent;
+}
+
+function fakeExecutionContext(): ExecutionContext {
+  return { waitUntil: () => {}, passThroughOnException: () => {}, props: {} } as unknown as ExecutionContext;
+}
 
 const TEST_ENV = {} as Env;
 
@@ -238,5 +246,83 @@ describe('POST /api/probe-check', () => {
     expect(res.status).toBe(200);
     const body = (await res.json()) as { reachable: boolean };
     expect(body.reachable).toBe(false);
+  });
+});
+
+// Mirrors the existing graceful-degradation coverage style for other
+// bindings in this file (POST /api/monitors, POST /api/stripe/webhook,
+// etc.): the reconciliation-cron tick must never throw just because a
+// binding/secret hasn't been provisioned yet — it's a Cron Trigger with no
+// caller to hand an error to.
+describe('scheduled — reconciliation cron (RECONCILIATION_CRON) graceful degradation', () => {
+  const originalFetch = global.fetch;
+
+  afterEach(() => {
+    vi.restoreAllMocks();
+    global.fetch = originalFetch;
+  });
+
+  it('no-ops without touching Stripe when STRIPE_SECRET_KEY is missing', async () => {
+    const fetchMock = vi.fn();
+    global.fetch = fetchMock as unknown as typeof fetch;
+    const logSpy = vi.spyOn(console, 'log').mockImplementation(() => {});
+
+    const env = { DB: {} as unknown as D1Database } as Env;
+    await expect(
+      scheduled(fakeScheduledEvent(RECONCILIATION_CRON), env, fakeExecutionContext())
+    ).resolves.toBeUndefined();
+
+    expect(fetchMock).not.toHaveBeenCalled();
+    expect(logSpy).toHaveBeenCalledWith(expect.stringContaining('STRIPE_SECRET_KEY missing'));
+  });
+
+  it('no-ops without touching Stripe when DB is missing', async () => {
+    const fetchMock = vi.fn();
+    global.fetch = fetchMock as unknown as typeof fetch;
+    const logSpy = vi.spyOn(console, 'log').mockImplementation(() => {});
+
+    const env = { STRIPE_SECRET_KEY: 'sk_test_fake' } as Env;
+    await expect(
+      scheduled(fakeScheduledEvent(RECONCILIATION_CRON), env, fakeExecutionContext())
+    ).resolves.toBeUndefined();
+
+    expect(fetchMock).not.toHaveBeenCalled();
+    expect(logSpy).toHaveBeenCalledWith(expect.stringContaining('DB binding missing'));
+  });
+
+  it('no-ops when both STRIPE_SECRET_KEY and DB are missing', async () => {
+    const fetchMock = vi.fn();
+    global.fetch = fetchMock as unknown as typeof fetch;
+    vi.spyOn(console, 'log').mockImplementation(() => {});
+
+    const env = {} as Env;
+    await expect(
+      scheduled(fakeScheduledEvent(RECONCILIATION_CRON), env, fakeExecutionContext())
+    ).resolves.toBeUndefined();
+
+    expect(fetchMock).not.toHaveBeenCalled();
+  });
+
+  it('logs and returns without throwing when D1 fails after a successful Stripe fetch', async () => {
+    global.fetch = vi.fn(async () =>
+      jsonResponse({ data: [{ id: 'sub_1', customer: 'cus_A' }], has_more: false })
+    ) as unknown as typeof fetch;
+    const errorSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
+
+    const failingDb = {
+      prepare: () => ({
+        all: () => Promise.reject(new Error('D1 unavailable')),
+      }),
+    } as unknown as D1Database;
+    const env = { STRIPE_SECRET_KEY: 'sk_test_fake', DB: failingDb } as Env;
+
+    await expect(
+      scheduled(fakeScheduledEvent(RECONCILIATION_CRON), env, fakeExecutionContext())
+    ).resolves.toBeUndefined();
+
+    expect(errorSpy).toHaveBeenCalledWith(
+      expect.stringContaining('failed to read known Stripe customer ids from D1'),
+      expect.any(Error)
+    );
   });
 });

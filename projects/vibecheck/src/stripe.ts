@@ -131,6 +131,84 @@ export function createStripeGateway(secretKey: string, webhookSecret: string): S
   };
 }
 
+// ── Reconciliation: listing Stripe's own view of active subscriptions ──────
+// Backstop for critic-munger's pre-mortem finding (docs/critic/
+// vibecheck-monitoring-tier-premortem.md: "reconciliation-cron webhook
+// safety net") — POST /api/stripe/webhook above is the only thing that ever
+// creates a D1 `users` row from a Stripe payment. Stripe retries a failing
+// webhook, but not forever, and a Worker bug/outage could still drop one:
+// a customer who paid Stripe would then have no dashboard access despite
+// being charged, with nothing in this codebase ever noticing. This function
+// re-derives "Stripe thinks this customer should have access" so
+// src/reconcile.ts can diff it against D1's view (see that file for the
+// pure gap-detection logic; this file only owns the Stripe HTTP call).
+
+interface StripeSubscriptionListItem {
+  id: string;
+  customer: string;
+}
+
+interface StripeSubscriptionListResponse {
+  data: StripeSubscriptionListItem[];
+  has_more: boolean;
+}
+
+// Deliberately NOT filtered by `created` — that's the subscription object's
+// creation timestamp, not "when it last changed status." A subscription
+// created days ago that only just transitioned into active/trialing (a
+// delayed trial start, a 3DS payment confirmation completing hours later, a
+// past_due→active recovery, a reactivation) would have an old `created` and
+// silently fall outside any creation-time window forever, defeating the
+// point of a safety net. Instead this walks Stripe's full current
+// active/trialing list via cursor pagination (`starting_after`) every tick
+// — correct over cheap, since this is the thing whose entire job is to
+// catch what the primary path missed.
+async function fetchStripeSubscriptionCustomerIds(secretKey: string, status: 'active' | 'trialing'): Promise<string[]> {
+  const customerIds: string[] = [];
+  let startingAfter: string | undefined;
+
+  for (;;) {
+    const params = new URLSearchParams({ status, limit: '100' });
+    if (startingAfter) params.set('starting_after', startingAfter);
+
+    const res = await fetch(`${STRIPE_API}/subscriptions?${params.toString()}`, {
+      headers: { Authorization: `Bearer ${secretKey}` },
+    });
+    if (!res.ok) {
+      const text = await res.text().catch(() => '');
+      throw new Error(`Stripe subscription list (status=${status}) failed (${res.status}): ${text}`);
+    }
+    const data = (await res.json()) as StripeSubscriptionListResponse;
+    for (const sub of data.data) customerIds.push(sub.customer);
+
+    if (!data.has_more || data.data.length === 0) break;
+    startingAfter = data.data[data.data.length - 1].id;
+  }
+
+  return customerIds;
+}
+
+// Lists distinct Stripe customer ids that Stripe currently considers
+// active-or-trialing, across all pages.
+//
+// Design choice: Stripe's `status=active` filter does NOT include
+// `trialing` — they're distinct statuses in Stripe's vocabulary. Rather than
+// fetch `status=all` and filter client-side over every possible Stripe
+// status (past_due, canceled, incomplete, unpaid, ...), this makes two
+// narrow calls — one per status this codebase actually expects to have a D1
+// user row (see `narrowSubscriptionStatus` above: 'active' and 'trialing'
+// both narrow to our 'active' subscription_status). Two small, explicit
+// calls are easier to reason about than one broad call plus a status
+// allowlist that has to be kept in sync with narrowSubscriptionStatus by
+// hand.
+export async function fetchActiveStripeCustomerIds(secretKey: string): Promise<string[]> {
+  const [active, trialing] = await Promise.all([
+    fetchStripeSubscriptionCustomerIds(secretKey, 'active'),
+    fetchStripeSubscriptionCustomerIds(secretKey, 'trialing'),
+  ]);
+  return Array.from(new Set([...active, ...trialing]));
+}
+
 // ── Pure: webhook event routing ──────────────────────────────────────────────
 // Minimal shape of the Stripe events this endpoint cares about — not the
 // full Stripe.Event type (that's the SDK's job if/when we add it), just what
