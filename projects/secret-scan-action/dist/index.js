@@ -33175,6 +33175,11 @@ exports.PATTERN_RULES = [
         // its own, so only the distinctive sq0atp- prefix is included here.
         build: () => /\bsq0atp-[\w-]{22,60}\b/g,
     },
+    {
+        id: "age-secret-key",
+        description: "age encryption secret key",
+        build: () => /\bAGE-SECRET-KEY-1[QPZRY9X8GF2TVDW0S3JN54KHCE6MUA7L]{58}\b/g,
+    },
 ];
 /**
  * Variable-name fragment that makes a high-entropy value worth flagging.

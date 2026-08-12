@@ -398,6 +398,18 @@ describe("scanLine — true positives (known-leaked-secret patterns)", () => {
     expect(findings.some((f) => f.ruleId === "square-access-token")).toBe(false);
   });
 
+  it("flags an age encryption secret key", () => {
+    const body = "QPZRY9X8GF2TVDW0S3JN54KHCE6MUA7L".repeat(2).slice(0, 58);
+    const findings = scanLine(line(`const AGE_KEY = "AGE-SECRET-KEY-1${body}";`));
+    expect(findings.some((f) => f.ruleId === "age-secret-key" && f.confidence === "high")).toBe(true);
+  });
+
+  it("does not flag an age-secret-key-shaped token that is one character short", () => {
+    const body = "QPZRY9X8GF2TVDW0S3JN54KHCE6MUA7L".repeat(2).slice(0, 57);
+    const findings = scanLine(line(`const AGE_KEY = "AGE-SECRET-KEY-1${body}";`));
+    expect(findings.some((f) => f.ruleId === "age-secret-key")).toBe(false);
+  });
+
   it("flags a generic high-entropy value assigned to a secret-like variable name", () => {
     const findings = scanLine(line(`const apiToken = "zT9pQ2xR7mK4vL8nW1sD6fH3jC0bA5eY";`));
     expect(findings.some((f) => f.ruleId === "generic-high-entropy-secret" && f.confidence === "generic")).toBe(
