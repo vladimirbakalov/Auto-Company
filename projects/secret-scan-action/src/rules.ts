@@ -313,6 +313,14 @@ export const PATTERN_RULES: PatternRule[] = [
     // prefix and body shape, no legitimate non-secret use.
     build: () => /\bEZTK[A-Za-z0-9]{54}\b/g,
   },
+  {
+    id: "dynatrace-api-token",
+    description: "Dynatrace API token",
+    // dt0c01. + 24 case-insensitive alphanumeric chars + . + 64
+    // case-insensitive alphanumeric chars, exact lengths. Fixed prefix
+    // and body shape, no legitimate non-secret use.
+    build: () => /\bdt0c01\.[A-Za-z0-9]{24}\.[A-Za-z0-9]{64}\b/g,
+  },
 ];
 
 /**

@@ -350,6 +350,18 @@ describe("scanLine — true positives (known-leaked-secret patterns)", () => {
     expect(findings.some((f) => f.ruleId === "easypost-test-api-token")).toBe(false);
   });
 
+  it("flags a Dynatrace API token", () => {
+    const token = `dt0c01.${"aB1cD2eF3".repeat(3).slice(0, 24)}.${"aB1cD2eF3".repeat(8).slice(0, 64)}`;
+    const findings = scanLine(line(`const DYNATRACE_TOKEN = "${token}";`));
+    expect(findings.some((f) => f.ruleId === "dynatrace-api-token" && f.confidence === "high")).toBe(true);
+  });
+
+  it("does not flag a Dynatrace-shaped token whose second segment is one character short", () => {
+    const token = `dt0c01.${"aB1cD2eF3".repeat(3).slice(0, 24)}.${"aB1cD2eF3".repeat(8).slice(0, 63)}`;
+    const findings = scanLine(line(`const DYNATRACE_TOKEN = "${token}";`));
+    expect(findings.some((f) => f.ruleId === "dynatrace-api-token")).toBe(false);
+  });
+
   it("flags a generic high-entropy value assigned to a secret-like variable name", () => {
     const findings = scanLine(line(`const apiToken = "zT9pQ2xR7mK4vL8nW1sD6fH3jC0bA5eY";`));
     expect(findings.some((f) => f.ruleId === "generic-high-entropy-secret" && f.confidence === "generic")).toBe(
