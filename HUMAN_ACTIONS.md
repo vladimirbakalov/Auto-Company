@@ -75,12 +75,17 @@ gh auth refresh -h github.com -s workflow
 Browser approval, ~30 seconds. Unblocks CI (`.github/workflows/*`) for the
 monorepo and all three standalone repos — currently the agent can't commit or
 push workflow files at all without this. The CI workflow itself is already
-written and verified against both repos' live `package.json` — see
-`docs/devops/action-repos-ci-workflow-cycle32.md` for the ready-to-paste
-`.github/workflows/ci.yml` content (typecheck + test + build + dist-drift
-check) for `pr-summary-action` and `secret-scan-action`. Once this scope is
-granted, dropping that file in and pushing is the only remaining step —
-no design work left to do.
+written and verified against each repo's live `package.json`:
+- `docs/devops/action-repos-ci-workflow-cycle32.md` — ready-to-paste
+  `.github/workflows/ci.yml` (typecheck + test + build + dist-drift check)
+  for `pr-summary-action` and `secret-scan-action`.
+- `docs/devops/secretguard-mcp-ci-workflow-cycle33.md` — ready-to-paste
+  `.github/workflows/ci.yml` (typecheck + test + build, no dist-drift check
+  since `dist/` isn't committed there) for `secretguard-mcp`.
+
+Once this scope is granted, dropping the matching file in per repo and
+pushing is the only remaining step — no design work left to do, for any of
+the three repos.
 
 ## Bigger unlock — the actual revenue blocker
 
