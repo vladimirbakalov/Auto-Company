@@ -66,6 +66,10 @@ permissions:
   pull-requests: write # needed to post/update the summary comment
   contents: read # needed to read the diff
 
+concurrency:
+  group: pr-summary-${{ github.event.pull_request.number }}
+  cancel-in-progress: true
+
 jobs:
   summarize:
     runs-on: ubuntu-latest
@@ -80,6 +84,12 @@ jobs:
 
 That's it. Open (or push to) a pull request and the action will comment
 within a minute or two.
+
+The `concurrency` block above matters if you push multiple commits in quick
+succession: without it, two runs racing on the same PR can both decide no
+summary comment exists yet and each create one, leaving a duplicate. With
+it, GitHub cancels the older in-flight run so only the latest push's
+summary is generated.
 
 > Only grant `pull-requests: write` and `contents: read` — this action
 > never needs more than that, and the example above intentionally doesn't

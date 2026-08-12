@@ -32633,7 +32633,20 @@ function buildDiffText(files, maxChars) {
             const note = file.status === "renamed" && file.changes === 0
                 ? "(renamed, no content change)"
                 : "(no textual diff available — binary file or diff too large for the GitHub API to return)";
-            sections.set(index, header + note);
+            const entry = header + note;
+            // These notes are cheap individually, but a PR touching thousands of
+            // binary/oversized files (nothing rare for a vendored dependency
+            // bump) would otherwise add them unconditionally with no budget
+            // check at all — the one part of this function that wasn't actually
+            // bounded. Charge them against `remaining` like everything else, and
+            // drop the note (the file is still named in the file list above)
+            // once the budget is gone.
+            if (entry.length > remaining) {
+                truncated = true;
+                continue;
+            }
+            sections.set(index, entry);
+            remaining -= entry.length;
             truncated = truncated || file.status !== "renamed";
             continue;
         }
@@ -32649,12 +32662,12 @@ function buildDiffText(files, maxChars) {
         }
         if (file.patch.length <= cap) {
             sections.set(index, header + file.patch);
-            remaining -= file.patch.length;
+            remaining -= header.length + file.patch.length;
         }
         else {
             const shown = file.patch.slice(0, cap);
             sections.set(index, `${header}${shown}\n… (truncated — showing first ${cap} of ${file.patch.length} characters)`);
-            remaining -= cap;
+            remaining -= header.length + cap;
             truncated = true;
         }
     }
@@ -32843,7 +32856,14 @@ Be specific and reference file names where useful. Do not restate the entire dif
  * key into Action logs.
  */
 async function summarizePr(params) {
-    const client = new sdk_1.default({ apiKey: params.apiKey });
+    // baseURL is pinned explicitly (not left to the SDK default) because the
+    // SDK falls back to process.env['ANTHROPIC_BASE_URL'] when unset. Actions
+    // runners execute many steps in one process/job, so a prior step (a
+    // compromised third-party action, an org-level env var, a typo) setting
+    // that variable would otherwise silently redirect the API key and the
+    // full PR diff to a non-Anthropic endpoint — contradicting this action's
+    // "never sent anywhere but api.anthropic.com" guarantee.
+    const client = new sdk_1.default({ apiKey: params.apiKey, baseURL: "https://api.anthropic.com" });
     let response;
     try {
         response = await client.messages.create({

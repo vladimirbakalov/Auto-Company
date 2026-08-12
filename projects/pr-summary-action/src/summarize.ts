@@ -31,7 +31,14 @@ Be specific and reference file names where useful. Do not restate the entire dif
  * key into Action logs.
  */
 export async function summarizePr(params: SummarizeParams): Promise<string> {
-  const client = new Anthropic({ apiKey: params.apiKey });
+  // baseURL is pinned explicitly (not left to the SDK default) because the
+  // SDK falls back to process.env['ANTHROPIC_BASE_URL'] when unset. Actions
+  // runners execute many steps in one process/job, so a prior step (a
+  // compromised third-party action, an org-level env var, a typo) setting
+  // that variable would otherwise silently redirect the API key and the
+  // full PR diff to a non-Anthropic endpoint — contradicting this action's
+  // "never sent anywhere but api.anthropic.com" guarantee.
+  const client = new Anthropic({ apiKey: params.apiKey, baseURL: "https://api.anthropic.com" });
 
   let response: Anthropic.Message;
   try {

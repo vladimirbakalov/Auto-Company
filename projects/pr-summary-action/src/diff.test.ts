@@ -93,6 +93,21 @@ describe("buildDiffText", () => {
     expect(truncated).toBe(false);
   });
 
+  it("bounds output even when many files have no patch (binary/oversized diffs)", () => {
+    // Regression test: the "no textual diff available" note used to be
+    // appended for every patch-less file with zero budget accounting, so a
+    // PR touching thousands of binary/oversized files (plausible for a
+    // vendored dependency bump) could blow the character budget wide open
+    // even though every other code path in this function was bounded.
+    const files = Array.from({ length: 100 }, (_, i) =>
+      file({ filename: `asset-${i}.png`, patch: undefined, status: "modified", changes: 1 }),
+    );
+    const { text, truncated } = buildDiffText(files, 5000);
+
+    expect(truncated).toBe(true);
+    expect(text.length).toBeLessThan(5000 * 2);
+  });
+
   it("truncates the file list itself for absurdly small budgets", () => {
     const files = Array.from({ length: 500 }, (_, i) => file({ filename: `file-${i}.ts` }));
     const { text, truncated } = buildDiffText(files, 100);

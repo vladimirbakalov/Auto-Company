@@ -66,7 +66,20 @@ export function buildDiffText(files: PullRequestFile[], maxChars: number): DiffP
       const note = file.status === "renamed" && file.changes === 0
         ? "(renamed, no content change)"
         : "(no textual diff available — binary file or diff too large for the GitHub API to return)";
-      sections.set(index, header + note);
+      const entry = header + note;
+      // These notes are cheap individually, but a PR touching thousands of
+      // binary/oversized files (nothing rare for a vendored dependency
+      // bump) would otherwise add them unconditionally with no budget
+      // check at all — the one part of this function that wasn't actually
+      // bounded. Charge them against `remaining` like everything else, and
+      // drop the note (the file is still named in the file list above)
+      // once the budget is gone.
+      if (entry.length > remaining) {
+        truncated = true;
+        continue;
+      }
+      sections.set(index, entry);
+      remaining -= entry.length;
       truncated = truncated || file.status !== "renamed";
       continue;
     }
@@ -85,14 +98,14 @@ export function buildDiffText(files: PullRequestFile[], maxChars: number): DiffP
 
     if (file.patch.length <= cap) {
       sections.set(index, header + file.patch);
-      remaining -= file.patch.length;
+      remaining -= header.length + file.patch.length;
     } else {
       const shown = file.patch.slice(0, cap);
       sections.set(
         index,
         `${header}${shown}\n… (truncated — showing first ${cap} of ${file.patch.length} characters)`,
       );
-      remaining -= cap;
+      remaining -= header.length + cap;
       truncated = true;
     }
   }
