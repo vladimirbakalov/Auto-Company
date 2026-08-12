@@ -75,7 +75,7 @@ jobs:
   scan:
     runs-on: ubuntu-latest
     steps:
-      - uses: vladimirbakalov/secret-scan-action@main
+      - uses: vladimirbakalov/secret-scan-action@v1
         with:
           # anthropic-api-key: ${{ secrets.ANTHROPIC_API_KEY }}  # optional — enables AI triage of ambiguous matches
           # fail-on: "high"        # optional, this is the default ("any" also blocks on generic matches)
@@ -85,8 +85,8 @@ jobs:
 That's it. Open (or push to) a pull request and the action comments within a
 minute or two — no Anthropic key, no other account, no signup.
 
-> Pin `@main` to a commit SHA (or a release tag once one exists) for
-> reproducible builds.
+> `@v1` tracks the latest `v1.x` release. Pin to a full commit SHA instead
+> if you want builds immune to any future tag update.
 
 The `concurrency` block prevents duplicate comments when you push multiple
 commits to a PR in quick succession.

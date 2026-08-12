@@ -74,7 +74,7 @@ jobs:
   summarize:
     runs-on: ubuntu-latest
     steps:
-      - uses: vladimirbakalov/pr-summary-action@main
+      - uses: vladimirbakalov/pr-summary-action@v1
         with:
           anthropic-api-key: ${{ secrets.ANTHROPIC_API_KEY }}
           # github-token defaults to the automatic GITHUB_TOKEN — no need to set it
@@ -85,8 +85,8 @@ jobs:
 That's it. Open (or push to) a pull request and the action will comment
 within a minute or two.
 
-> Pin `@main` to a specific commit SHA (or a release tag once one exists)
-> if you want reproducible builds immune to upstream changes.
+> `@v1` tracks the latest `v1.x` release. Pin to a full commit SHA instead
+> if you want builds immune to any future tag update.
 
 The `concurrency` block above matters if you push multiple commits in quick
 succession: without it, two runs racing on the same PR can both decide no
