@@ -23,7 +23,8 @@ import { computeScore, scoreToGrade } from './scoring';
 import { landingPage } from './pages';
 import type { Env, ScanResult, UserRow, WaitlistEntry } from './types';
 import { ScanError } from './types';
-import { probeUrl } from './probe';
+import { probeUrl, validateProbeTarget } from './probe';
+import { buildLiveFindings } from './liveChecks';
 import { detectTrafficAnomaly, evaluateUptimeTransition } from './anomaly';
 import {
   applyCheckResultToMonitor,
@@ -72,7 +73,7 @@ app.get('/', () => htmlResponse(landingPage()));
 
 // ── Scan API ─────────────────────────────────────────────────────────────────
 app.post('/api/scan', async c => {
-  let body: { repoUrl?: string };
+  let body: { repoUrl?: string; deployedUrl?: string };
   try {
     body = await c.req.json();
   } catch {
@@ -88,8 +89,6 @@ app.post('/api/scan', async c => {
     const files = await fetchFiles(ref, defaultBranch, candidates);
 
     const findings = runAllChecks(tree, files);
-    const score = computeScore(findings);
-    const grade = scoreToGrade(score);
 
     const notes: string[] = [
       'GitHub public API is rate-limited to 60 requests/hour per IP when unauthenticated; scans may occasionally fail during high traffic — retry after a minute.',
@@ -97,6 +96,33 @@ app.post('/api/scan', async c => {
     if (tree.length > files.length + candidates.length) {
       notes.push('Repo tree was larger than this scan\'s sampling budget; only a subset of files were checked.');
     }
+
+    // Optional live-URL security check (ADR §3 caller #1, spec §2.2). This is
+    // an *unauthenticated* server-side fetch of a user-supplied URL, so it
+    // must go through validateProbeTarget first (see probe.ts) — same
+    // graceful-degradation style as the WAITLIST/DB binding checks elsewhere
+    // in this file: a bad/unreachable URL never fails the whole scan, it
+    // just skips live findings and says why.
+    const deployedUrlInput = (body.deployedUrl ?? '').trim();
+    if (deployedUrlInput) {
+      const validated = validateProbeTarget(deployedUrlInput);
+      if (!validated.ok) {
+        notes.push(`Skipped live URL check: ${validated.reason}`);
+      } else {
+        try {
+          const liveFindings = await buildLiveFindings(validated.url);
+          findings.push(...liveFindings);
+        } catch (err) {
+          console.error('Live URL probe failed:', err);
+          notes.push(
+            'Skipped live URL check: could not reach the deployed URL. This did not affect the repo scan above.'
+          );
+        }
+      }
+    }
+
+    const score = computeScore(findings);
+    const grade = scoreToGrade(score);
 
     const result: ScanResult = {
       owner: ref.owner,
@@ -118,6 +144,56 @@ app.post('/api/scan', async c => {
     }
     console.error('Unhandled scan error:', err);
     return c.json({ error: 'Unexpected error while scanning. Please try again.' }, 500);
+  }
+});
+
+// ── Live-ping demo (spec §3.4) ───────────────────────────────────────────────
+// Lightweight reachability + latency check used by the "Start monitoring"
+// inline flow on the scan-results page: proves the product works, before any
+// payment is discussed, and doubles as the tourist filter CFO asked for
+// (someone with no real deployment simply cannot pass this check). Reuses
+// the exact same validateProbeTarget guard as POST /api/scan's deployedUrl
+// and POST /api/monitors' url — one probe validation path, not a third one.
+// Deliberately just a reachability ping (probeUrl on '/'), not the fuller
+// buildLiveFindings security check — that already ran as part of the scan
+// if the user supplied a deployedUrl there; this endpoint's only job is the
+// green/red "we can see it's live" moment from spec §3.4 step 2.
+//
+// KNOWN GAP (QA cycle #1146, not fixed this pass): this is unauthenticated
+// and unrate-limited, so it's a free reachability/latency oracle for any
+// target that clears validateProbeTarget. Same is true of POST /api/scan's
+// deployedUrl and POST /api/monitors' url, and there's no rate-limiting
+// anywhere in this codebase yet. Low urgency pre-deploy (no live traffic to
+// abuse), but should get a coarse per-IP throttle (e.g. KV-backed sliding
+// window, same binding style as WAITLIST) before/shortly after launch.
+app.post('/api/probe-check', async c => {
+  let body: { url?: string };
+  try {
+    body = await c.req.json();
+  } catch {
+    return c.json({ error: 'Expected JSON body with a url field' }, 400);
+  }
+
+  const validated = validateProbeTarget((body.url ?? '').trim());
+  if (!validated.ok) {
+    return c.json({ reachable: false, error: validated.reason }, 400);
+  }
+
+  try {
+    const probe = await probeUrl(validated.url, { path: '/' });
+    if (!probe.ok) {
+      return c.json({ reachable: false, error: probe.error ?? 'Could not reach that URL.' });
+    }
+    return c.json({ reachable: true, latencyMs: probe.latencyMs, status: probe.status });
+  } catch (err) {
+    // probeUrl's own try/catch only covers the initial fetchWithTimeout call;
+    // a mid-body stream error (origin resets the connection after headers,
+    // TLS failure during body read) rejects instead. This endpoint's contract
+    // is to always return a reachable:true/false JSON body, never fall
+    // through to the generic 500 handler, same graceful-degradation style as
+    // POST /api/scan's live-probe path.
+    console.error('probe-check failed:', err);
+    return c.json({ reachable: false, error: 'Could not reach that URL.' });
   }
 });
 
@@ -246,14 +322,14 @@ app.post('/api/monitors', async c => {
     return c.json({ error: 'Expected JSON body with a url field' }, 400);
   }
 
-  let parsedUrl: URL;
-  try {
-    parsedUrl = new URL((body.url ?? '').trim());
-  } catch {
-    return c.json({ error: 'A valid, absolute URL is required (e.g. https://myapp.vercel.app)' }, 400);
-  }
-  if (parsedUrl.protocol !== 'https:' && parsedUrl.protocol !== 'http:') {
-    return c.json({ error: 'Only http/https URLs can be monitored' }, 400);
+  // Same literal-hostname SSRF guard as POST /api/scan's optional
+  // deployedUrl (probe.ts's validateProbeTarget) — this endpoint is
+  // auth-gated but not payment-verified, and every monitor here feeds
+  // straight into the Cron Trigger's probeUrl fan-out, so it gets the same
+  // guard rather than a narrower one.
+  const validated = validateProbeTarget((body.url ?? '').trim());
+  if (!validated.ok) {
+    return c.json({ error: validated.reason }, 400);
   }
 
   // 5-15 min range per CEO brief (ADR §2 "Interval enforcement").
@@ -263,7 +339,7 @@ app.post('/api/monitors', async c => {
   }
 
   try {
-    const monitor = await insertMonitor(c.env.DB, { userId: user.id, url: parsedUrl.toString(), intervalSeconds });
+    const monitor = await insertMonitor(c.env.DB, { userId: user.id, url: validated.url, intervalSeconds });
     return c.json({ monitor }, 201);
   } catch (err) {
     console.error('Failed to create monitor:', err);
@@ -461,6 +537,11 @@ async function scheduled(_event: ScheduledEvent, env: Env, _ctx: ExecutionContex
     20
   );
 }
+
+// Exported for tests (Hono apps support `.request()` directly, no server
+// needed — see test/index.test.ts) — the default export below is what
+// wrangler actually loads.
+export { app };
 
 export default {
   fetch: app.fetch,

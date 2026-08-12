@@ -47,6 +47,10 @@ export function landingPage(): string {
   }
 
   form { display: flex; gap: 10px; }
+  #scan-form { flex-direction: column; }
+  .form-row { display: flex; gap: 10px; }
+  .form-row-optional { display: flex; flex-direction: column; gap: 6px; }
+  .optional-tag { color: var(--muted); font-size: 12px; }
   input[type="text"] {
     flex: 1;
     background: #0e1117;
@@ -145,10 +149,19 @@ export function landingPage(): string {
   .waitlist-msg.ok { color: var(--accent); }
   .waitlist-msg.err { color: var(--critical); }
 
+  #start-monitoring-btn { margin-top: 2px; }
+  .monitor-step { margin-top: 16px; }
+  .checkout-step { margin-top: 14px; }
+  .probe-result { font-size: 13px; margin-top: 10px; }
+  .probe-result.ok { color: var(--accent); }
+  .probe-result.err { color: var(--critical); }
+  .waitlist-fallback { margin-top: 20px; padding-top: 16px; border-top: 1px solid var(--panel-border); }
+
   footer { text-align: center; color: var(--muted); font-size: 13px; margin-top: 48px; }
   footer a { color: var(--muted); }
 
   .spinner { display: inline-block; width: 14px; height: 14px; border: 2px solid rgba(6,40,28,0.4); border-top-color: #06281c; border-radius: 50%; animation: spin 0.7s linear infinite; margin-right: 8px; vertical-align: -2px; }
+  .spinner-light { display: inline-block; width: 14px; height: 14px; border: 2px solid rgba(231,233,238,0.25); border-top-color: var(--accent); border-radius: 50%; animation: spin 0.7s linear infinite; margin-right: 8px; vertical-align: -2px; }
   @keyframes spin { to { transform: rotate(360deg); } }
 </style>
 </head>
@@ -162,8 +175,14 @@ export function landingPage(): string {
 
     <div class="card">
       <form id="scan-form">
-        <input type="text" id="repo-input" placeholder="https://github.com/owner/repo" autocomplete="off" spellcheck="false" required />
-        <button type="submit" id="scan-btn">Scan</button>
+        <div class="form-row">
+          <input type="text" id="repo-input" placeholder="https://github.com/owner/repo" autocomplete="off" spellcheck="false" required />
+          <button type="submit" id="scan-btn">Scan</button>
+        </div>
+        <div class="form-row-optional">
+          <input type="text" id="deployed-input" placeholder="https://myapp.vercel.app" autocomplete="off" spellcheck="false" />
+          <span class="optional-tag">Optional &mdash; add your live deployed URL to also check response headers, CORS, and exposed paths on the running app.</span>
+        </div>
       </form>
       <p class="note">Public repos only. Runs against GitHub's public API, so occasionally rate-limited &mdash; if a scan fails, wait a minute and retry. Static heuristics, not a full audit &mdash; see confidence label on each finding.</p>
 
@@ -181,6 +200,7 @@ export function landingPage(): string {
 (function () {
   const form = document.getElementById('scan-form');
   const input = document.getElementById('repo-input');
+  const deployedInput = document.getElementById('deployed-input');
   const btn = document.getElementById('scan-btn');
   const resultEl = document.getElementById('result');
   const errorEl = document.getElementById('error');
@@ -218,19 +238,54 @@ export function landingPage(): string {
 
     html += '<div class="meta-line">Scanned ' + data.filesScanned + ' of ' + data.filesInTree + ' files in the repo (sampled, not exhaustive &mdash; see note below). ' + escapeHtml(data.notes.join(' ')) + '</div>';
 
+    // Outcome-aware upgrade CTA (spec §3.2) — the offer is framed as a direct
+    // consequence of what the user just saw, not a generic upsell.
+    const isClean = grade === 'A';
+    const ctaCopy = isClean
+      ? 'Clean scan. Want to know the moment that changes &mdash; or if your traffic starts looking expensive?'
+      : 'You just fixed real issues &mdash; or you&rsquo;re about to. Want to know if this app slips back into a bad state, or if its traffic starts looking like it&rsquo;s about to cost you money?';
+
     html += '<div class="waitlist">';
-    html += '<p>Want an alert when your API bill spikes, or your app goes down? Join the waitlist for cost + uptime monitoring.</p>';
+    html += '<p id="upgrade-copy">' + ctaCopy + '</p>';
+    html += '<button type="button" id="start-monitoring-btn">Start monitoring &mdash; $20/mo</button>';
+
+    // Touchpoint 3 (spec §3.4): clicking "Start monitoring" reveals an inline
+    // live-ping demo in the same card, no navigation — a real, visible proof
+    // the product already works before any payment is discussed.
+    html += '<div id="monitor-url-step" class="monitor-step" style="display:none;">';
+    html += '<p class="note">What&rsquo;s your live URL?</p>';
+    html += '<form id="probe-form">';
+    html += '<input type="text" id="probe-url-input" placeholder="https://myapp.vercel.app" autocomplete="off" spellcheck="false" required />';
+    html += '<button type="submit" id="probe-btn">Check</button>';
+    html += '</form>';
+    html += '<div id="probe-result" class="probe-result" style="display:none;"></div>';
+    html += '<div id="checkout-step" class="checkout-step" style="display:none;">';
+    html += '<form id="checkout-form">';
+    html += '<input type="email" id="checkout-email" placeholder="you@example.com" autocomplete="email" required />';
+    html += '<button type="submit" id="checkout-btn">Continue to checkout</button>';
+    html += '</form>';
+    html += '<div id="checkout-msg" class="waitlist-msg" style="display:none;"></div>';
+    html += '</div>'; // #checkout-step
+    html += '</div>'; // #monitor-url-step
+
+    // Touchpoint 4 (spec §3.5): waitlist stays as the pre-launch fallback
+    // path for anyone who doesn't want to click through the full flow now.
+    html += '<div class="waitlist-fallback">';
+    html += '<p>Not ready yet? Join the waitlist and we&rsquo;ll email you the moment monitoring launches.</p>';
     html += '<form id="waitlist-form">';
     html += '<input type="email" id="waitlist-email" placeholder="you@example.com" autocomplete="email" required />';
     html += '<button type="submit" id="waitlist-btn">Join waitlist</button>';
     html += '</form>';
     html += '<div id="waitlist-msg" class="waitlist-msg" style="display:none;"></div>';
-    html += '</div>';
+    html += '</div>'; // .waitlist-fallback
+
+    html += '</div>'; // .waitlist
 
     resultEl.innerHTML = html;
     resultEl.style.display = 'block';
 
     wireWaitlistForm(data.owner + '/' + data.repo);
+    wireUpgradeFlow();
   }
 
   function wireWaitlistForm(repoUrl) {
@@ -270,6 +325,93 @@ export function landingPage(): string {
     });
   }
 
+  // Touchpoint 3 (spec §3.4): "Start monitoring" -> inline live-ping demo ->
+  // checkout. Uses POST /api/probe-check (reachability + latency only, same
+  // validateProbeTarget guard as POST /api/scan's deployedUrl) so the "we can
+  // see it's live" moment doesn't require re-running the full security scan.
+  function wireUpgradeFlow() {
+    const startBtn = document.getElementById('start-monitoring-btn');
+    const step = document.getElementById('monitor-url-step');
+    const probeForm = document.getElementById('probe-form');
+    const probeInput = document.getElementById('probe-url-input');
+    const probeBtn = document.getElementById('probe-btn');
+    const probeResult = document.getElementById('probe-result');
+    const checkoutStep = document.getElementById('checkout-step');
+    const checkoutForm = document.getElementById('checkout-form');
+    const checkoutEmail = document.getElementById('checkout-email');
+    const checkoutBtn = document.getElementById('checkout-btn');
+    const checkoutMsg = document.getElementById('checkout-msg');
+    if (!startBtn) return;
+
+    startBtn.addEventListener('click', function () {
+      step.style.display = 'block';
+      startBtn.style.display = 'none';
+      // Reuse whatever the user already typed in the optional deployed-URL
+      // field on the scan form, if anything, so they don't retype it.
+      if (deployedInput && deployedInput.value.trim()) {
+        probeInput.value = deployedInput.value.trim();
+      }
+      probeInput.focus();
+    });
+
+    probeForm.addEventListener('submit', async function (e) {
+      e.preventDefault();
+      checkoutStep.style.display = 'none';
+      probeResult.className = 'probe-result';
+      probeResult.innerHTML = '<span class="spinner-light"></span>Checking&hellip;';
+      probeResult.style.display = 'block';
+      probeBtn.disabled = true;
+
+      try {
+        const res = await fetch('/api/probe-check', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ url: probeInput.value }),
+        });
+        const data = await res.json();
+        if (res.ok && data.reachable) {
+          probeResult.className = 'probe-result ok';
+          probeResult.textContent = '✓ We can see it’s live. Response time: ' + data.latencyMs + 'ms.';
+          checkoutStep.style.display = 'block';
+        } else {
+          probeResult.className = 'probe-result err';
+          probeResult.textContent = "We couldn't reach that URL. Monitoring needs a live, publicly reachable deployment — that's what makes uptime and cost alerts possible in the first place. Not deployed yet? Bookmark this scan and come back once it's live — your free scan results stay saved.";
+        }
+      } catch (err) {
+        probeResult.className = 'probe-result err';
+        probeResult.textContent = 'Something went wrong checking that URL. Please try again.';
+      } finally {
+        probeBtn.disabled = false;
+      }
+    });
+
+    checkoutForm.addEventListener('submit', async function (e) {
+      e.preventDefault();
+      checkoutMsg.style.display = 'none';
+      checkoutBtn.disabled = true;
+      checkoutBtn.innerHTML = '<span class="spinner"></span>Redirecting&hellip;';
+
+      try {
+        const res = await fetch('/api/checkout', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ email: checkoutEmail.value }),
+        });
+        const data = await res.json();
+        if (!res.ok || !data.url) {
+          throw new Error(data.error || 'Checkout is not available yet. Please join the waitlist below instead.');
+        }
+        window.location.href = data.url;
+      } catch (err) {
+        checkoutMsg.className = 'waitlist-msg err';
+        checkoutMsg.textContent = err.message || 'Something went wrong. Please try again.';
+        checkoutMsg.style.display = 'block';
+        checkoutBtn.disabled = false;
+        checkoutBtn.textContent = 'Continue to checkout';
+      }
+    });
+  }
+
   form.addEventListener('submit', async function (e) {
     e.preventDefault();
     errorEl.style.display = 'none';
@@ -278,10 +420,13 @@ export function landingPage(): string {
     btn.innerHTML = '<span class="spinner"></span>Scanning&hellip;';
 
     try {
+      const payload = { repoUrl: input.value };
+      const deployedUrlValue = deployedInput.value.trim();
+      if (deployedUrlValue) payload.deployedUrl = deployedUrlValue;
       const res = await fetch('/api/scan', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ repoUrl: input.value }),
+        body: JSON.stringify(payload),
       });
       const data = await res.json();
       if (!res.ok) {

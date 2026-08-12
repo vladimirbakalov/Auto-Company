@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
-import { probeUrl, probeSensitivePaths, SENSITIVE_PATHS } from '../src/probe';
+import { probeUrl, probeSensitivePaths, SENSITIVE_PATHS, validateProbeTarget } from '../src/probe';
 import { SECRET_PATTERNS } from '../src/checks';
 
 function jsonHeaders(extra: Record<string, string> = {}): Headers {
@@ -135,6 +135,106 @@ describe('probeUrl', () => {
     expect(result.ok).toBe(false);
     expect(result.status).toBeNull();
     expect(result.error).toBe('fetch failed');
+  });
+});
+
+describe('validateProbeTarget', () => {
+  it('accepts a well-formed https URL', () => {
+    const result = validateProbeTarget('https://myapp.vercel.app');
+    expect(result.ok).toBe(true);
+    if (result.ok) {
+      expect(result.url).toBe('https://myapp.vercel.app/');
+    }
+  });
+
+  it('accepts a well-formed http URL', () => {
+    const result = validateProbeTarget('http://example.com/some/path');
+    expect(result.ok).toBe(true);
+  });
+
+  it('rejects an empty/whitespace-only input', () => {
+    const result = validateProbeTarget('   ');
+    expect(result.ok).toBe(false);
+  });
+
+  it('rejects an unparseable URL', () => {
+    const result = validateProbeTarget('not a url');
+    expect(result.ok).toBe(false);
+  });
+
+  it('rejects non-http(s) schemes', () => {
+    for (const scheme of ['ftp://example.com', 'file:///etc/passwd', 'gopher://example.com']) {
+      const result = validateProbeTarget(scheme);
+      expect(result.ok).toBe(false);
+    }
+  });
+
+  it('rejects the "localhost" hostname literal', () => {
+    const result = validateProbeTarget('http://localhost:3000');
+    expect(result.ok).toBe(false);
+  });
+
+  it('rejects 0.0.0.0', () => {
+    expect(validateProbeTarget('http://0.0.0.0').ok).toBe(false);
+  });
+
+  it('rejects IPv4 loopback (127.0.0.0/8)', () => {
+    expect(validateProbeTarget('http://127.0.0.1').ok).toBe(false);
+    expect(validateProbeTarget('http://127.1.2.3').ok).toBe(false);
+  });
+
+  it('rejects IPv4 private ranges (10/8, 172.16/12, 192.168/16)', () => {
+    expect(validateProbeTarget('http://10.0.0.5').ok).toBe(false);
+    expect(validateProbeTarget('http://172.16.0.1').ok).toBe(false);
+    expect(validateProbeTarget('http://172.31.255.255').ok).toBe(false);
+    expect(validateProbeTarget('http://192.168.1.1').ok).toBe(false);
+  });
+
+  it('does not treat 172.15.x.x or 172.32.x.x as private (boundary check)', () => {
+    expect(validateProbeTarget('http://172.15.0.1').ok).toBe(true);
+    expect(validateProbeTarget('http://172.32.0.1').ok).toBe(true);
+  });
+
+  it('rejects IPv4 link-local (169.254.0.0/16)', () => {
+    expect(validateProbeTarget('http://169.254.169.254').ok).toBe(false);
+  });
+
+  it('rejects IPv6 loopback and unspecified addresses', () => {
+    expect(validateProbeTarget('http://[::1]').ok).toBe(false);
+    expect(validateProbeTarget('http://[::]').ok).toBe(false);
+  });
+
+  it('rejects IPv6 unique-local (fc00::/7) and link-local (fe80::/10)', () => {
+    expect(validateProbeTarget('http://[fc00::1]').ok).toBe(false);
+    expect(validateProbeTarget('http://[fd12:3456::1]').ok).toBe(false);
+    expect(validateProbeTarget('http://[fe80::1]').ok).toBe(false);
+  });
+
+  it('rejects IPv4-mapped IPv6 literals encoding private/loopback/link-local addresses', () => {
+    // Regression for a bypass found in QA: WHATWG URL normalizes these to
+    // hex-group form (e.g. "[::ffff:169.254.169.254]" -> hostname
+    // "[::ffff:a9fe:a9fe]"), which the plain dotted-quad IPv4 check and the
+    // old IPv6 check (::1/::/fc00::/fe80::) both missed entirely — including
+    // the cloud-metadata address 169.254.169.254.
+    expect(validateProbeTarget('http://[::ffff:169.254.169.254]').ok).toBe(false);
+    expect(validateProbeTarget('http://[::ffff:127.0.0.1]').ok).toBe(false);
+    expect(validateProbeTarget('http://[::ffff:10.0.0.1]').ok).toBe(false);
+    expect(validateProbeTarget('http://[::ffff:192.168.1.1]').ok).toBe(false);
+    expect(validateProbeTarget('http://[::ffff:172.16.0.1]').ok).toBe(false);
+  });
+
+  it('accepts an IPv4-mapped IPv6 literal encoding a public address', () => {
+    expect(validateProbeTarget('http://[::ffff:93.184.216.34]').ok).toBe(true);
+  });
+
+  it('accepts a public IPv4 literal', () => {
+    expect(validateProbeTarget('http://93.184.216.34').ok).toBe(true);
+  });
+
+  it('rejects a bare "127" or malformed IPv4-looking hostname only via strict 4-octet match (no false negative on partial forms)', () => {
+    // Sanity: something that merely contains "127" but isn't a loopback IP
+    // should NOT be blocked — the check is exact-hostname, not substring.
+    expect(validateProbeTarget('http://127example.com').ok).toBe(true);
   });
 });
 
