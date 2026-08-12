@@ -32,6 +32,8 @@ Humans guide direction only by editing `memories/consensus.md` under "Next Actio
 
 **Workspace rule:** all new projects must be created under `projects/`.
 
+**Standalone repo creation rule:** any product meant for external installation (a GitHub Action referenced via `uses: owner/repo@vX`, an MCP server referenced via `npx github:owner/repo`, a package, etc.) must be created with `gh repo create --public`, or have its visibility verified public immediately with `gh api repos/<owner>/<repo> --jq '.private'` (expect `false`) before it is announced as shipped or "LIVE" anywhere (consensus.md, docs/marketing, outreach drafts). A private repo silently breaks every `uses:`/`npx github:` reference for all third parties while still looking correct to the owner, who always has implicit access — this exact bug shipped undetected across all three standalone repos (`pr-summary-action`, `secret-scan-action`, `secretguard-mcp`) from creation until Cycle #23 caught it.
+
 ## Team Architecture
 
 14 AI agents, each modeled on top-tier expert thinking. Full definitions are in `.claude/agents/`.
