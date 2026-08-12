@@ -64,6 +64,34 @@ describe("scanLine — true positives (known-leaked-secret patterns)", () => {
     expect(findings.some((f) => f.ruleId === "jwt" && f.confidence === "high")).toBe(true);
   });
 
+  it("flags a legacy OpenAI API key", () => {
+    const findings = scanLine(line(`const OPENAI_API_KEY = "sk-${"A".repeat(48)}";`));
+    expect(findings.some((f) => f.ruleId === "openai-api-key" && f.confidence === "high")).toBe(true);
+    expect(findings.some((f) => f.ruleId === "openai-project-api-key")).toBe(false);
+  });
+
+  it("flags an OpenAI project API key without also matching the legacy rule", () => {
+    const findings = scanLine(line(`const OPENAI_API_KEY = "sk-proj-${"aB3_-".repeat(10)}";`));
+    expect(findings.some((f) => f.ruleId === "openai-project-api-key" && f.confidence === "high")).toBe(true);
+    expect(findings.some((f) => f.ruleId === "openai-api-key")).toBe(false);
+  });
+
+  it("flags an OpenAI service-account API key", () => {
+    const findings = scanLine(line(`const key = "sk-svcacct-${"aB3_-".repeat(10)}";`));
+    expect(findings.some((f) => f.ruleId === "openai-project-api-key")).toBe(true);
+  });
+
+  it("flags an Anthropic API key without also matching the legacy OpenAI rule", () => {
+    const findings = scanLine(line(`const ANTHROPIC_API_KEY = "sk-ant-api03-${"aB3_-".repeat(10)}";`));
+    expect(findings.some((f) => f.ruleId === "anthropic-api-key" && f.confidence === "high")).toBe(true);
+    expect(findings.some((f) => f.ruleId === "openai-api-key")).toBe(false);
+  });
+
+  it("flags an npm access token", () => {
+    const findings = scanLine(line(`//registry.npmjs.org/:_authToken=npm_${"A".repeat(36)}`));
+    expect(findings.some((f) => f.ruleId === "npm-access-token" && f.confidence === "high")).toBe(true);
+  });
+
   it("flags a generic high-entropy value assigned to a secret-like variable name", () => {
     const findings = scanLine(line(`const apiToken = "zT9pQ2xR7mK4vL8nW1sD6fH3jC0bA5eY";`));
     expect(findings.some((f) => f.ruleId === "generic-high-entropy-secret" && f.confidence === "generic")).toBe(

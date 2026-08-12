@@ -2,7 +2,8 @@
 
 A free GitHub Action that scans a pull request's **changed lines only** for
 leaked secrets — AWS keys, Stripe keys, GitHub tokens, Google API keys, Slack
-tokens, private key blocks, JWTs, and generic high-entropy credentials — and
+tokens, OpenAI keys, Anthropic keys, npm access tokens, private key blocks,
+JWTs, and generic high-entropy credentials — and
 fails the check when it finds a confirmed one. It works out of the box with
 zero configuration and no API key. Optionally, bring your own Anthropic API
 key to have Claude triage the small set of ambiguous matches and cut noise.
@@ -26,7 +27,9 @@ On every `pull_request` event:
      near-certain secrets when matched: AWS access key IDs (`AKIA...`) and
      contextual secret keys, Stripe live keys (`sk_live_`, `rk_live_`),
      GitHub tokens (`ghp_`, `gho_`, `github_pat_`, ...), Google API keys
-     (`AIza...`), Slack tokens (`xox[baprs]-...`), private key blocks
+     (`AIza...`), Slack tokens (`xox[baprs]-...`), OpenAI keys (`sk-...`,
+     `sk-proj-...`, `sk-svcacct-...`), Anthropic keys (`sk-ant-...`), npm
+     access tokens (`npm_...`), private key blocks
      (`-----BEGIN ... PRIVATE KEY-----`), and JWTs.
    - **Generic entropy rule** — a value assigned to a variable named like
      `secret`, `token`, `password`/`credential`, or a `*key` compound

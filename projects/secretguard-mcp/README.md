@@ -2,8 +2,8 @@
 
 An MCP (Model Context Protocol) server that scans a code string for
 hardcoded secrets — AWS keys, Stripe keys, GitHub tokens, Google API keys,
-Slack tokens, private key blocks, JWTs, and generic high-entropy credentials
-— so an AI coding agent (Claude Code, Cursor, Windsurf, ...) can catch a
+Slack tokens, OpenAI keys, Anthropic keys, npm access tokens, private key
+blocks, JWTs, and generic high-entropy credentials — so an AI coding agent (Claude Code, Cursor, Windsurf, ...) can catch a
 secret *before* it writes the file or makes the commit, instead of finding
 out at CI/PR-review time. It exposes exactly one tool, `scan_for_secrets`,
 runs entirely locally over stdio, needs no API key, and never returns a raw
@@ -29,7 +29,9 @@ On a `scan_for_secrets` call:
      near-certain secrets when matched: AWS access key IDs (`AKIA...`) and
      contextual secret keys, Stripe live keys (`sk_live_`, `rk_live_`),
      GitHub tokens (`ghp_`, `gho_`, `github_pat_`, ...), Google API keys
-     (`AIza...`), Slack tokens (`xox[baprs]-...`), private key blocks
+     (`AIza...`), Slack tokens (`xox[baprs]-...`), OpenAI keys (`sk-...`,
+     `sk-proj-...`, `sk-svcacct-...`), Anthropic keys (`sk-ant-...`), npm
+     access tokens (`npm_...`), private key blocks
      (`-----BEGIN ... PRIVATE KEY-----`), and JWTs.
    - **Generic entropy rule** — a value assigned to a variable named like
      `secret`, `token`, `password`/`credential`, or a `*key` compound

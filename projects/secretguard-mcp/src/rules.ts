@@ -73,6 +73,30 @@ export const PATTERN_RULES: PatternRule[] = [
     description: "JSON Web Token",
     build: () => /\bey[A-Za-z0-9_-]{10,}\.[A-Za-z0-9_-]{10,}\.[A-Za-z0-9_-]{10,}\b/g,
   },
+  {
+    id: "openai-api-key",
+    description: "OpenAI API key (legacy)",
+    // No hyphens/underscores allowed in the body, which is what keeps this from also
+    // matching sk-proj-/sk-svcacct- keys (openai-project-api-key) or sk-ant- keys
+    // (anthropic-api-key): those all hit a "-" within the first few chars and stop short
+    // of the 20-char floor here.
+    build: () => /\bsk-[A-Za-z0-9]{20,}\b/g,
+  },
+  {
+    id: "openai-project-api-key",
+    description: "OpenAI project/service-account API key",
+    build: () => /\bsk-(?:proj|svcacct)-[A-Za-z0-9_-]{20,}\b/g,
+  },
+  {
+    id: "anthropic-api-key",
+    description: "Anthropic API key",
+    build: () => /\bsk-ant-[A-Za-z0-9_-]{20,}\b/g,
+  },
+  {
+    id: "npm-access-token",
+    description: "npm access token",
+    build: () => /\bnpm_[A-Za-z0-9]{36}\b/g,
+  },
 ];
 
 /**
