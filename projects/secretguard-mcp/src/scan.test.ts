@@ -314,6 +314,18 @@ describe("scanLine — true positives (known-leaked-secret patterns)", () => {
     expect(findings.some((f) => f.ruleId === "frameio-api-token")).toBe(false);
   });
 
+  it("flags a Duffel API token", () => {
+    const token = `duffel_test_${"aB1-_9cD2".repeat(5).slice(0, 43)}`; // 43 chars
+    const findings = scanLine(line(`const DUFFEL_TOKEN = "${token}";`));
+    expect(findings.some((f) => f.ruleId === "duffel-api-token" && f.confidence === "high")).toBe(true);
+  });
+
+  it("does not flag a Duffel-shaped token whose body is one character short", () => {
+    const token = `duffel_live_${"aB1-_9cD2".repeat(5).slice(0, 42)}`; // 42 chars
+    const findings = scanLine(line(`const DUFFEL_TOKEN = "${token}";`));
+    expect(findings.some((f) => f.ruleId === "duffel-api-token")).toBe(false);
+  });
+
   it("flags a generic high-entropy value assigned to a secret-like variable name", () => {
     const findings = scanLine(line(`const apiToken = "zT9pQ2xR7mK4vL8nW1sD6fH3jC0bA5eY";`));
     expect(findings.some((f) => f.ruleId === "generic-high-entropy-secret" && f.confidence === "generic")).toBe(

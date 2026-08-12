@@ -291,6 +291,14 @@ export const PATTERN_RULES: PatternRule[] = [
     // and body shape, no legitimate non-secret use.
     build: () => /\bfio-u-[A-Za-z0-9\-_=]{64}\b/g,
   },
+  {
+    id: "duffel-api-token",
+    description: "Duffel API token",
+    // duffel_test_ or duffel_live_ + 43 case-insensitive word/hyphen/equals
+    // chars, exact length. Fixed prefix and body shape, no legitimate
+    // non-secret use.
+    build: () => /\bduffel_(?:test|live)_[A-Za-z0-9_\-=]{43}\b/g,
+  },
 ];
 
 /**
