@@ -386,6 +386,18 @@ describe("scanLine — true positives (known-leaked-secret patterns)", () => {
     expect(findings.some((f) => f.ruleId === "gitlab-pat")).toBe(false);
   });
 
+  it("flags a Square Access Token", () => {
+    const token = `sq0atp-${"aB1cD2eF3".repeat(3).slice(0, 22)}`;
+    const findings = scanLine(line(`const SQUARE_TOKEN = "${token}";`));
+    expect(findings.some((f) => f.ruleId === "square-access-token" && f.confidence === "high")).toBe(true);
+  });
+
+  it("does not flag a Square-Access-Token-shaped token that is one character short", () => {
+    const token = `sq0atp-${"aB1cD2eF3".repeat(3).slice(0, 21)}`;
+    const findings = scanLine(line(`const SQUARE_TOKEN = "${token}";`));
+    expect(findings.some((f) => f.ruleId === "square-access-token")).toBe(false);
+  });
+
   it("flags a generic high-entropy value assigned to a secret-like variable name", () => {
     const findings = scanLine(line(`const apiToken = "zT9pQ2xR7mK4vL8nW1sD6fH3jC0bA5eY";`));
     expect(findings.some((f) => f.ruleId === "generic-high-entropy-secret" && f.confidence === "generic")).toBe(

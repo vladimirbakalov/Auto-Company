@@ -335,6 +335,15 @@ export const PATTERN_RULES: PatternRule[] = [
     // shape, no legitimate non-secret use.
     build: () => /\bglpat-[\w-]{20}\b/g,
   },
+  {
+    id: "square-access-token",
+    description: "Square Access Token",
+    // sq0atp- + 22-60 word/hyphen chars (mirrors gitleaks' own {22,60}
+    // bound). Upstream also alternates on a bare "EAAA" prefix, which is
+    // too short/common to ship as a distinct high-confidence pattern on
+    // its own, so only the distinctive sq0atp- prefix is included here.
+    build: () => /\bsq0atp-[\w-]{22,60}\b/g,
+  },
 ];
 
 /**
