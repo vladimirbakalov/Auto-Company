@@ -22,9 +22,8 @@ mcp-publisher login github   # one-time device-flow browser click
 mcp-publisher publish
 ```
 `server.json` is already prepared and points at the correct `.mcpb` release
-asset. `mcp-publisher` itself isn't installed on this machine yet — see
-https://github.com/modelcontextprotocol/registry for the install step if
-`brew`/`go install` isn't already covered by your setup.
+asset. `mcp-publisher` is now installed (`brew install mcp-publisher`, done
+Cycle #26) — `login` is the only step left, browser click only.
 
 ### 3. List `pr-summary-action` and `secret-scan-action` on GitHub Marketplace
 No API for this — has to be the web UI, per repo:
@@ -56,7 +55,8 @@ top blocker for 19+ cycles. Full steps:
 same account, separate D1/R2 resources).
 
 ```bash
-wrangler login   # not installed yet either — npm install -g wrangler first
+wrangler login   # wrangler is now installed (npm install -g wrangler, done
+                 # Cycle #26) — login is the only step left, browser click only
 ```
 
 ### 6. Resend (for vibecheck/snapog transactional email)
