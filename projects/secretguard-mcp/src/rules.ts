@@ -164,6 +164,19 @@ export const PATTERN_RULES: PatternRule[] = [
     // this matches {32,} rather than an exact count.
     build: () => /\bshp(?:at|ca|ss|pa|ua)_[a-fA-F0-9]{32,}\b/g,
   },
+  {
+    id: "telegram-bot-token",
+    description: "Telegram bot API token",
+    // <bot_id>:<35-char secret>, secret always starts with 'A' (base64url
+    // encoding of Telegram's internal token-type byte prefix). An earlier,
+    // looser version of this pattern (bare digits + 35 arbitrary base64url
+    // chars, no leading-'A' constraint) is exactly what gitleaks' own
+    // telegram-bot-token rule used to ship, and it produced false positives
+    // on unrelated digit:alnum35 pairs (e.g. XML schema identifiers) — see
+    // gitleaks PR #1404. Requiring the leading 'A' plus a word boundary
+    // narrows the match back down to the real token shape.
+    build: () => /\b[0-9]{5,16}:A[A-Za-z0-9_-]{34}\b/g,
+  },
 ];
 
 /**

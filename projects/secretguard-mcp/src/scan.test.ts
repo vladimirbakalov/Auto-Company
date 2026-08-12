@@ -148,6 +148,12 @@ describe("scanLine — true positives (known-leaked-secret patterns)", () => {
     expect(findings.some((f) => f.ruleId === "shopify-access-token" && f.confidence === "high")).toBe(true);
   });
 
+  it("flags a Telegram bot API token", () => {
+    const token = "110201543:AodJFCrnl2edlBDdz1C5Jau2RJtBRnlWmTS";
+    const findings = scanLine(line(`const TELEGRAM_TOKEN = "${token}";`));
+    expect(findings.some((f) => f.ruleId === "telegram-bot-token" && f.confidence === "high")).toBe(true);
+  });
+
   it("flags a generic high-entropy value assigned to a secret-like variable name", () => {
     const findings = scanLine(line(`const apiToken = "zT9pQ2xR7mK4vL8nW1sD6fH3jC0bA5eY";`));
     expect(findings.some((f) => f.ruleId === "generic-high-entropy-secret" && f.confidence === "generic")).toBe(
@@ -180,6 +186,10 @@ describe("scanLine — no false positives on clean code", () => {
     `const url = "postgres://user:password@localhost:5432/mydb";`, // placeholder password, not flagged
     `const url = "mysql://root:changeit@127.0.0.1:3306/app";`, // placeholder password, not flagged
     `const url = "postgres://user:\${DB_PASSWORD}@localhost:5432/mydb";`, // env-var reference, not a literal value
+    `const aspectRatio = "16:9";`, // digit:digit, far too short for the Telegram token shape
+    `const port = "localhost:8080";`, // digit:alnum but not 35 chars and doesn't start with 'A'
+    `const timestamp = "1699999999:BPtYgjmUhBel31iEl2hpChYgCfrL1spNxny";`, // right shape and length but secret doesn't start with 'A'
+    `const schemaRef = "12345:AgencyIdentificationCodeContentTypeExtended";`, // digit:CamelCase identifier longer than the token shape — word boundary rules it out
   ];
 
   it.each(cleanLines)("flags nothing for: %s", (content) => {

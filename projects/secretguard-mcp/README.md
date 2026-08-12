@@ -2,10 +2,10 @@
 
 An MCP (Model Context Protocol) server that scans a code string for
 hardcoded secrets — AWS keys, Stripe keys, GitHub tokens, Google API keys and
-OAuth client secrets, Slack tokens and incoming webhook URLs, OpenAI keys,
-Anthropic keys, npm access tokens, SendGrid keys, Twilio API keys, Azure
-Storage account keys, database connection strings with embedded passwords,
-private key blocks, JWTs, and
+OAuth client secrets, Slack tokens and incoming webhook URLs, Shopify access
+tokens, Telegram bot tokens, OpenAI keys, Anthropic keys, npm access tokens,
+SendGrid keys, Twilio API keys, Azure Storage account keys, database
+connection strings with embedded passwords, private key blocks, JWTs, and
 generic high-entropy credentials — so an AI coding agent (Claude Code, Cursor, Windsurf, ...) can catch a
 secret *before* it writes the file or makes the commit, instead of finding
 out at CI/PR-review time. It exposes exactly one tool, `scan_for_secrets`,
@@ -35,11 +35,11 @@ On a `scan_for_secrets` call:
      (`AIza...`), Google OAuth client secrets (`GOCSPX-...`), Slack tokens
      (`xox[baprs]-...`), Slack incoming webhook URLs
      (`hooks.slack.com/services/...`), Shopify access tokens (`shpat_...`,
-     `shpca_...`, `shpss_...`, `shppa_...`, `shpua_...`), OpenAI keys
-     (`sk-...`, `sk-proj-...`, `sk-svcacct-...`), Anthropic keys
-     (`sk-ant-...`), npm access tokens (`npm_...`), SendGrid keys (`SG....`),
-     Twilio API keys (`SK...`), Azure Storage account keys (contextual
-     `AccountKey=...`), private key blocks
+     `shpca_...`, `shpss_...`, `shppa_...`, `shpua_...`), Telegram bot tokens
+     (`<bot_id>:A...`, 35-char secret), OpenAI keys (`sk-...`, `sk-proj-...`,
+     `sk-svcacct-...`), Anthropic keys (`sk-ant-...`), npm access tokens
+     (`npm_...`), SendGrid keys (`SG....`), Twilio API keys (`SK...`), Azure
+     Storage account keys (contextual `AccountKey=...`), private key blocks
      (`-----BEGIN ... PRIVATE KEY-----`), and JWTs. One pattern rule —
      database connection strings with an embedded password
      (`postgres://`, `mysql://`, `mongodb(+srv)://`, `redis(s)://`,
