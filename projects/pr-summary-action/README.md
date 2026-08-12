@@ -74,7 +74,7 @@ jobs:
   summarize:
     runs-on: ubuntu-latest
     steps:
-      - uses: vladimirbakalov/Auto-Company/projects/pr-summary-action@main
+      - uses: vladimirbakalov/pr-summary-action@main
         with:
           anthropic-api-key: ${{ secrets.ANTHROPIC_API_KEY }}
           # github-token defaults to the automatic GITHUB_TOKEN — no need to set it
@@ -85,13 +85,8 @@ jobs:
 That's it. Open (or push to) a pull request and the action will comment
 within a minute or two.
 
-> This action currently lives inside a larger monorepo, so it's referenced
-> as `owner/repo/path-to-action@ref` rather than a top-level
-> `owner/repo@ref` — that's a normal, supported GitHub Actions form, not a
-> workaround. Pin `@main` to a specific commit SHA instead if you want
-> reproducible builds immune to upstream changes (GitHub Marketplace
-> listing isn't available yet either way, since Marketplace requires
-> `action.yml` at a repo's root — see the "Distribution" note below).
+> Pin `@main` to a specific commit SHA (or a release tag once one exists)
+> if you want reproducible builds immune to upstream changes.
 
 The `concurrency` block above matters if you push multiple commits in quick
 succession: without it, two runs racing on the same PR can both decide no
@@ -133,14 +128,12 @@ summary is generated.
 
 ## Distribution
 
-Right now this action is used by referencing it directly out of this
-monorepo (see the `uses:` line above) — that works today for anyone. It is
-**not yet listed on the GitHub Marketplace**, because Marketplace listing
-requires `action.yml` to sit at the root of its own dedicated repository,
-and requires an interactive "Publish this release to the Marketplace" step
-in GitHub's web UI (there's no API/CLI equivalent). Extracting this
-directory into its own repo and completing that publish step is a
-follow-up, not a blocker to using the action today.
+Lives in its own dedicated repo (`vladimirbakalov/pr-summary-action`), so the
+`uses:` line above works for anyone today. It is **not yet listed on the
+GitHub Marketplace** — that requires an interactive "Publish this release to
+the Marketplace" step in GitHub's web UI (there's no API/CLI equivalent).
+Completing that publish step is a follow-up, not a blocker to using the
+action today.
 
 ## Development
 
