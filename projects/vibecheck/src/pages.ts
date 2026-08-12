@@ -113,6 +113,8 @@ export function landingPage(): string {
   .finding-title { font-weight: 600; margin: 6px 0 4px; }
   .finding-explain { color: var(--muted); font-size: 14px; }
   .finding-file { color: var(--muted); font-size: 12px; font-family: ui-monospace, monospace; margin-top: 4px; }
+  .finding-monitor-link { display: block; margin-top: 6px; font-size: 13px; color: var(--accent-dim); text-decoration: none; }
+  .finding-monitor-link:hover { color: var(--accent); text-decoration: underline; }
 
   .clean { color: var(--accent); text-align: center; padding: 12px 0; }
 
@@ -209,6 +211,21 @@ export function landingPage(): string {
     return String(s).replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
   }
 
+  // Touchpoint 2 (spec §3.3): findings that are literally the cost/uptime
+  // risk vectors §1 describes — missing auth, permissive CORS, exposed
+  // .env/secrets — get an inline link into the monitoring flow. IDs come
+  // from nextId()/nextLiveId() in checks.ts/liveChecks.ts: static findings
+  // are '<prefix>-N' (e.g. 'auth-3', 'secret-generic-1'), live-probe
+  // findings are 'live-<prefix>-N' (e.g. 'live-cors-2'), so strip an
+  // optional 'live-' prefix before matching.
+  const MONITORABLE_FINDING_PREFIXES = ['auth', 'cors', 'env', 'secret'];
+  function isMonitorableFinding(f) {
+    if (!f || !f.id) return false;
+    const id = String(f.id);
+    const bare = id.indexOf('live-') === 0 ? id.slice(5) : id;
+    return MONITORABLE_FINDING_PREFIXES.some(function (p) { return bare.indexOf(p) === 0; });
+  }
+
   function renderResult(data) {
     const grade = data.grade;
     let html = '';
@@ -229,6 +246,9 @@ export function landingPage(): string {
         html += '</div>';
         html += '<div class="finding-title">' + escapeHtml(f.title) + '</div>';
         html += '<div class="finding-explain">' + escapeHtml(f.explanation) + '</div>';
+        if (isMonitorableFinding(f)) {
+          html += '<a href="#" class="finding-monitor-link" data-finding-id="' + escapeHtml(f.id) + '">This is exactly the kind of issue that leads to a surprise bill if left unfixed. <strong>Monitor this endpoint &rarr;</strong></a>';
+        }
         if (f.file) {
           html += '<div class="finding-file">' + escapeHtml(f.file) + (f.line ? ':' + f.line : '') + '</div>';
         }
@@ -341,17 +361,39 @@ export function landingPage(): string {
     const checkoutEmail = document.getElementById('checkout-email');
     const checkoutBtn = document.getElementById('checkout-btn');
     const checkoutMsg = document.getElementById('checkout-msg');
+
+    // Shared by "Start monitoring" (touchpoint 1) and the inline per-finding
+    // "Monitor this endpoint" links (touchpoint 2, spec §3.3) — one DOM flow,
+    // multiple entry points into it, per the spec's explicit instruction not
+    // to build a second parallel monitoring flow for the inline links.
+    function revealMonitorStep() {
+      if (!step) return;
+      step.style.display = 'block';
+      if (startBtn) startBtn.style.display = 'none';
+      // Reuse whatever the user already typed in the optional deployed-URL
+      // field on the scan form, if anything, so they don't retype it.
+      if (deployedInput && deployedInput.value.trim() && probeInput) {
+        probeInput.value = deployedInput.value.trim();
+      }
+      step.scrollIntoView({ behavior: 'smooth', block: 'start' });
+      if (probeInput) probeInput.focus();
+    }
+
+    // Wired independently of startBtn's existence check below so the inline
+    // finding links (which can render even if, for some reason, the bottom
+    // CTA markup didn't) never silently no-op.
+    const monitorLinks = document.querySelectorAll('.finding-monitor-link');
+    monitorLinks.forEach(function (link) {
+      link.addEventListener('click', function (e) {
+        e.preventDefault();
+        revealMonitorStep();
+      });
+    });
+
     if (!startBtn) return;
 
     startBtn.addEventListener('click', function () {
-      step.style.display = 'block';
-      startBtn.style.display = 'none';
-      // Reuse whatever the user already typed in the optional deployed-URL
-      // field on the scan form, if anything, so they don't retype it.
-      if (deployedInput && deployedInput.value.trim()) {
-        probeInput.value = deployedInput.value.trim();
-      }
-      probeInput.focus();
+      revealMonitorStep();
     });
 
     probeForm.addEventListener('submit', async function (e) {
