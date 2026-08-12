@@ -3,10 +3,11 @@
 A free GitHub Action that scans a pull request's **changed lines only** for
 leaked secrets — AWS keys, Stripe keys, GitHub tokens, Google API keys and
 OAuth client secrets, Slack tokens and incoming webhook URLs, Shopify access
-tokens, Telegram bot tokens, OpenAI keys, Anthropic keys, npm access tokens,
-SendGrid keys, Twilio API keys, Azure Storage account keys, database
-connection strings with embedded passwords, private key blocks, JWTs, and
-generic high-entropy credentials — and fails the check when it finds a
+tokens, Telegram bot tokens, DigitalOcean tokens, OpenAI keys, Anthropic
+keys, npm access tokens, SendGrid keys, Twilio API keys, Azure Storage
+account keys, database connection strings with embedded passwords, private
+key blocks, JWTs, and generic high-entropy credentials — and fails the
+check when it finds a
 confirmed one. It works out of the box with zero configuration and no API
 key. Optionally, bring your own Anthropic API key to have Claude triage the
 small set of ambiguous matches and cut noise.
@@ -34,7 +35,8 @@ On every `pull_request` event:
      (`xox[baprs]-...`), Slack incoming webhook URLs
      (`hooks.slack.com/services/...`), Shopify access tokens (`shpat_...`,
      `shpca_...`, `shpss_...`, `shppa_...`, `shpua_...`), Telegram bot tokens
-     (`<bot_id>:A...`, 35-char secret), OpenAI keys (`sk-...`, `sk-proj-...`,
+     (`<bot_id>:A...`, 35-char secret), DigitalOcean tokens (`dop_v1_...`,
+     `doo_v1_...`, `dor_v1_...`, 64-char hex), OpenAI keys (`sk-...`, `sk-proj-...`,
      `sk-svcacct-...`), Anthropic keys (`sk-ant-...`), npm access tokens
      (`npm_...`), SendGrid keys (`SG....`), Twilio API keys (`SK...`), Azure
      Storage account keys (contextual `AccountKey=...`), private key blocks

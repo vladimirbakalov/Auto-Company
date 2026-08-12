@@ -154,6 +154,20 @@ describe("scanLine — true positives (known-leaked-secret patterns)", () => {
     expect(findings.some((f) => f.ruleId === "telegram-bot-token" && f.confidence === "high")).toBe(true);
   });
 
+  it("flags a DigitalOcean personal access token", () => {
+    const token = `dop_v1_${"a1b2c3d4e5f6a7b8".repeat(4)}`;
+    const findings = scanLine(line(`const DIGITALOCEAN_TOKEN = "${token}";`));
+    expect(findings.some((f) => f.ruleId === "digitalocean-token" && f.confidence === "high")).toBe(true);
+  });
+
+  it("flags a DigitalOcean OAuth access token and refresh token", () => {
+    const accessToken = `doo_v1_${"0123456789abcdef".repeat(4)}`;
+    const refreshToken = `dor_v1_${"fedcba9876543210".repeat(4)}`;
+    const findings = scanLine(line(`accessToken="${accessToken}"; refreshToken="${refreshToken}";`));
+    expect(findings.some((f) => f.ruleId === "digitalocean-token" && f.secret === accessToken)).toBe(true);
+    expect(findings.some((f) => f.ruleId === "digitalocean-token" && f.secret === refreshToken)).toBe(true);
+  });
+
   it("flags a generic high-entropy value assigned to a secret-like variable name", () => {
     const findings = scanLine(line(`const apiToken = "zT9pQ2xR7mK4vL8nW1sD6fH3jC0bA5eY";`));
     expect(findings.some((f) => f.ruleId === "generic-high-entropy-secret" && f.confidence === "generic")).toBe(
@@ -190,6 +204,7 @@ describe("scanLine — no false positives on clean code", () => {
     `const port = "localhost:8080";`, // digit:alnum but not 35 chars and doesn't start with 'A'
     `const timestamp = "1699999999:BPtYgjmUhBel31iEl2hpChYgCfrL1spNxny";`, // right shape and length but secret doesn't start with 'A'
     `const schemaRef = "12345:AgencyIdentificationCodeContentTypeExtended";`, // digit:CamelCase identifier longer than the token shape — word boundary rules it out
+    `const buildTag = "dop_v1_${"a".repeat(63)}"`, // one hex char short of a real DigitalOcean token
   ];
 
   it.each(cleanLines)("flags nothing for: %s", (content) => {

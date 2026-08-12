@@ -177,6 +177,14 @@ export const PATTERN_RULES: PatternRule[] = [
     // narrows the match back down to the real token shape.
     build: () => /\b[0-9]{5,16}:A[A-Za-z0-9_-]{34}\b/g,
   },
+  {
+    id: "digitalocean-token",
+    description: "DigitalOcean personal access / OAuth / refresh token",
+    // dop_v1_ (personal access token), doo_v1_ (OAuth access token), dor_v1_
+    // (OAuth refresh token) — fixed prefix + 64-char lowercase-hex body, no
+    // legitimate non-secret use of this exact shape.
+    build: () => /\bdo[opr]_v1_[a-f0-9]{64}\b/g,
+  },
 ];
 
 /**
