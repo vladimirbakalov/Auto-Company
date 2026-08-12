@@ -75,7 +75,7 @@ jobs:
   scan:
     runs-on: ubuntu-latest
     steps:
-      - uses: vladimirbakalov/Auto-Company/projects/secret-scan-action@main
+      - uses: vladimirbakalov/secret-scan-action@main
         with:
           # anthropic-api-key: ${{ secrets.ANTHROPIC_API_KEY }}  # optional — enables AI triage of ambiguous matches
           # fail-on: "high"        # optional, this is the default ("any" also blocks on generic matches)
@@ -85,9 +85,8 @@ jobs:
 That's it. Open (or push to) a pull request and the action comments within a
 minute or two — no Anthropic key, no other account, no signup.
 
-> This action currently lives inside a larger monorepo, so it's referenced
-> as `owner/repo/path-to-action@ref`, same as this company's other actions.
-> Pin `@main` to a commit SHA for reproducible builds.
+> Pin `@main` to a commit SHA (or a release tag once one exists) for
+> reproducible builds.
 
 The `concurrency` block prevents duplicate comments when you push multiple
 commits to a PR in quick succession.
@@ -166,6 +165,15 @@ This is a stateless Action that runs inside your own CI job. No dashboard,
 no persistent secret-history database, no webhook server, no npm publish, no
 new cloud account. It reads the PR diff and (optionally) one allowlist file,
 and writes one PR comment. That's it.
+
+## Distribution
+
+Lives in its own dedicated repo (`vladimirbakalov/secret-scan-action`), so the
+`uses:` line above works for anyone today. It is **not yet listed on the
+GitHub Marketplace** — that requires an interactive "Publish this release to
+the Marketplace" step in GitHub's web UI (there's no API/CLI equivalent).
+Completing that publish step is a follow-up, not a blocker to using the
+action today.
 
 ## License
 
