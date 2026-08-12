@@ -33188,6 +33188,14 @@ exports.PATTERN_RULES = [
         // minimum length makes this distinctive enough to stay high confidence.
         build: () => /\bops_eyJ[a-zA-Z0-9+/]{250,}={0,3}\b/g,
     },
+    {
+        id: "alibaba-access-key-id",
+        description: "Alibaba Cloud AccessKey ID",
+        // LTAI (case-sensitive) + 20 case-insensitive alphanumeric chars,
+        // exact length. Fixed prefix and body shape, no legitimate non-secret
+        // use.
+        build: () => /\bLTAI[a-zA-Z0-9]{20}\b/g,
+    },
 ];
 /**
  * Variable-name fragment that makes a high-entropy value worth flagging.

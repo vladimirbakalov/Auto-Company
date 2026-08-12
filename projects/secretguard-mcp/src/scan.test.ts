@@ -424,6 +424,18 @@ describe("scanLine — true positives (known-leaked-secret patterns)", () => {
     expect(findings.some((f) => f.ruleId === "1password-service-account-token")).toBe(false);
   });
 
+  it("flags an Alibaba Cloud AccessKey ID", () => {
+    const token = `LTAI${"aB1cD2eF3".repeat(3).slice(0, 20)}`;
+    const findings = scanLine(line(`const ALIBABA_KEY = "${token}";`));
+    expect(findings.some((f) => f.ruleId === "alibaba-access-key-id" && f.confidence === "high")).toBe(true);
+  });
+
+  it("does not flag an Alibaba-AccessKey-ID-shaped token that is one character short", () => {
+    const token = `LTAI${"aB1cD2eF3".repeat(3).slice(0, 19)}`;
+    const findings = scanLine(line(`const ALIBABA_KEY = "${token}";`));
+    expect(findings.some((f) => f.ruleId === "alibaba-access-key-id")).toBe(false);
+  });
+
   it("flags a generic high-entropy value assigned to a secret-like variable name", () => {
     const findings = scanLine(line(`const apiToken = "zT9pQ2xR7mK4vL8nW1sD6fH3jC0bA5eY";`));
     expect(findings.some((f) => f.ruleId === "generic-high-entropy-secret" && f.confidence === "generic")).toBe(
