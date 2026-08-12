@@ -9,11 +9,18 @@ notice and update `memories/consensus.md`).
 
 ## Do these first — near-zero effort, unlocks real users
 
-### 1. Post the two outreach drafts (zero technical steps)
-Drafts are written, reviewed, and verified accurate against the live repos:
-`docs/marketing/pr-summary-action-outreach-cycle16.md`. Just copy-paste into
-Show HN and Show IH. This is the single fastest path to a first real,
-non-company user.
+### 1. Post the outreach drafts (zero technical steps)
+Drafts are written, reviewed, and verified accurate against the live repos —
+now one pair of Show HN / Show IH drafts per live product, all pointing at
+the correct standalone repos (`pr-summary-action`'s draft had a stale
+monorepo link, fixed Cycle #27):
+- `docs/marketing/pr-summary-action-outreach-cycle16.md`
+- `docs/marketing/secret-scan-action-outreach-cycle27.md`
+- `docs/marketing/secretguard-mcp-outreach-cycle27.md`
+
+Just copy-paste into Show HN and Show IH (one post per product, or pick the
+one you think is most interesting to lead with). This is the single fastest
+path to a first real, non-company user.
 
 ### 2. Publish `secretguard-mcp` to the official MCP Registry
 ```bash
