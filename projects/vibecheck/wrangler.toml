@@ -3,9 +3,31 @@ main = "src/index.ts"
 compatibility_date = "2024-11-01"
 compatibility_flags = ["nodejs_compat"]
 
-# No D1/R2 for the MVP — stateless request/response scanner, nothing to persist yet.
-# One exception: a KV namespace for the waitlist signup (see below) — a single
-# write-mostly email list doesn't need a relational database or migrations.
+# The free scanner stays stateless (no D1 reads/writes on /api/scan). D1 is
+# added below solely for the paid monitoring tier — users, monitors, checks,
+# alerts — per docs/cto/vibecheck-monitoring-tier-adr.md §1/§6. The waitlist
+# KV namespace is unrelated and stays exactly as it was: a single write-mostly
+# email list doesn't need a relational database or migrations.
+
+# Monitoring-tier D1 database (users/magic_links/monitors/checks/alerts —
+# see migrations/0001_init.sql). Same placeholder-id pattern as the WAITLIST
+# KV binding below: real id via `wrangler d1 create vibecheck-db` before
+# deploy, runtime null-check in code (`if (!c.env.DB)`) so local dev never
+# breaks on a missing binding. Apply migrations with:
+#   wrangler d1 migrations apply vibecheck-db --local
+#   wrangler d1 migrations apply vibecheck-db
+[[d1_databases]]
+binding = "DB"
+database_name = "vibecheck-db"
+database_id = "REPLACE_WITH_D1_DATABASE_ID"
+
+# Cron Trigger driving the `scheduled` handler in src/index.ts: polls D1 for
+# monitors due for a check (next_check_at <= now, paused = 0, active
+# subscription) and fans out probes. 1-minute tick per ADR §2 — cost scales
+# with ticks, not monitors, up to the per-tick LIMIT. No-ops gracefully if
+# c.env.DB is missing (same graceful-degradation style as WAITLIST).
+[triggers]
+crons = ["* * * * *"]
 
 # Waitlist KV store for the "cost + uptime monitoring, coming soon" email
 # capture on the scan-results page (CEO mandate: see

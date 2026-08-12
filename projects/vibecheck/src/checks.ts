@@ -111,7 +111,11 @@ export function checkExposedEnv(tree: string[], files: RepoFile[]): Finding[] {
 }
 
 // 2. Hardcoded secrets / API keys in source files
-const SECRET_PATTERNS: { name: string; regex: RegExp; severity: Finding['severity'] }[] = [
+//
+// Exported so probe.ts's live-URL security check (ADR §3, caller #1) can run
+// the exact same detection regexes against live HTTP response bodies instead
+// of inventing a second set of patterns — "one code path to fix" per the ADR.
+export const SECRET_PATTERNS: { name: string; regex: RegExp; severity: Finding['severity'] }[] = [
   { name: 'AWS Access Key ID', regex: /AKIA[0-9A-Z]{16}/, severity: 'critical' },
   { name: 'Stripe live secret key', regex: /\bsk_live_[0-9a-zA-Z]{16,}\b/, severity: 'critical' },
   { name: 'Stripe live restricted key', regex: /\brk_live_[0-9a-zA-Z]{16,}\b/, severity: 'critical' },

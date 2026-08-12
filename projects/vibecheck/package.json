@@ -8,7 +8,9 @@
     "deploy": "wrangler deploy",
     "typecheck": "tsc --noEmit",
     "test": "vitest run",
-    "staging:deploy": "wrangler deploy --env staging"
+    "staging:deploy": "wrangler deploy --env staging",
+    "db:local": "wrangler d1 migrations apply vibecheck-db --local",
+    "db:remote": "wrangler d1 migrations apply vibecheck-db"
   },
   "dependencies": {
     "hono": "^4.6.0"

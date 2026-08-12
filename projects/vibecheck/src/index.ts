@@ -1,18 +1,57 @@
 // vibecheck — Main Cloudflare Worker
 // Routes: GET / (landing page + scan UI), POST /api/scan (scan a public GitHub repo), GET /health
+// Monitoring tier (docs/cto/vibecheck-monitoring-tier-adr.md): POST /api/monitors,
+// POST /api/checkout, POST /api/stripe/webhook, GET /api/auth/verify, and the
+// `scheduled` export (Cron Trigger, see wrangler.toml [triggers]).
 //
-// Stateless MVP: no D1/R2, no auth, no persistence. Every request re-fetches from
-// GitHub. See github.ts for the unauthenticated rate-limit caveat (60 req/hr,
-// shared per-IP) — this is a known, accepted limitation for this validation-stage
-// build, not an oversight.
+// The free scan path is unchanged: stateless, no D1, re-fetches from GitHub
+// every request. See github.ts for the unauthenticated rate-limit caveat
+// (60 req/hr, shared per-IP) — a known, accepted limitation, not an oversight.
+//
+// The monitoring-tier routes below all check their D1/Stripe/session bindings
+// before using them and degrade gracefully (matching the existing
+// `if (!c.env.WAITLIST)` pattern) rather than 500ing when a binding hasn't
+// been provisioned yet — vibecheck currently cannot deploy to Cloudflare
+// (credentials blocked, a human/deploy-time concern), so this code is
+// verified via `npm run typecheck` + `npm test`, not a live deploy.
 
-import { Hono } from 'hono';
+import { Hono, type Context } from 'hono';
+import { getCookie, setCookie } from 'hono/cookie';
 import { fetchDefaultBranch, fetchFiles, fetchTree, parseRepoUrl } from './github';
 import { runAllChecks, selectCandidateFiles } from './checks';
 import { computeScore, scoreToGrade } from './scoring';
 import { landingPage } from './pages';
-import type { Env, ScanResult, WaitlistEntry } from './types';
+import type { Env, ScanResult, UserRow, WaitlistEntry } from './types';
 import { ScanError } from './types';
+import { probeUrl } from './probe';
+import { detectTrafficAnomaly, evaluateUptimeTransition } from './anomaly';
+import {
+  applyCheckResultToMonitor,
+  buildCheckInsert,
+  fetchDueMonitors,
+  fetchTrailingChecks,
+  hasOpenDownAlert,
+  insertAlert,
+  insertMonitor,
+  recordCheck,
+  resolveOpenDownAlert,
+  runBoundedFanOut,
+  updateMonitorAfterCheck,
+  DUE_QUEUE_LIMIT,
+} from './monitors';
+import {
+  findUserByApiKey,
+  updateSubscriptionStatus,
+  upsertUserFromCheckout,
+  validateAndConsumeMagicLink,
+  verifySession,
+  signSession,
+  createMagicLink,
+  SESSION_TTL_MS,
+} from './auth';
+import { createStripeGateway, routeStripeEvent, type StripeWebhookEvent } from './stripe';
+
+const SESSION_COOKIE = 'vc_session';
 
 // Deliberately simple RFC-5322-ish check — good enough to reject typos and
 // junk, not trying to be a full email grammar validator for a pre-launch
@@ -121,6 +160,226 @@ app.post('/api/waitlist', async c => {
   }
 });
 
+// ── Monitoring-tier auth ─────────────────────────────────────────────────────
+// Two accepted credentials, per ADR §5: an `Authorization: Bearer <apiKey>`
+// header, or the signed session cookie set by GET /api/auth/verify. Returns
+// null (not a thrown error) on any auth failure so callers decide the HTTP
+// status — this is a lookup, not a guard clause.
+async function requireAuth(c: Context<{ Bindings: Env }>): Promise<UserRow | null> {
+  if (!c.env.DB) return null;
+
+  const authHeader = c.req.header('Authorization');
+  if (authHeader?.startsWith('Bearer ')) {
+    const apiKey = authHeader.slice('Bearer '.length).trim();
+    if (apiKey) {
+      const user = await findUserByApiKey(c.env.DB, apiKey);
+      if (user) return user;
+    }
+  }
+
+  const sessionValue = getCookie(c, SESSION_COOKIE);
+  if (sessionValue && c.env.SESSION_SECRET) {
+    const payload = await verifySession(sessionValue, c.env.SESSION_SECRET);
+    if (payload) {
+      const user = await c.env.DB.prepare('SELECT * FROM users WHERE id = ?1').bind(payload.userId).first<UserRow>();
+      if (user) return user;
+    }
+  }
+
+  return null;
+}
+
+// Consumes a magic-link token (emailed after Stripe checkout, ADR §5 step 3),
+// marks it used, and issues a signed httpOnly session cookie. Returns JSON
+// rather than an HTML redirect — the dashboard UI itself is out of scope for
+// this backend-infra change (see docs/product/vibecheck-monitoring-tier-spec.md
+// §5; src/pages.ts is explicitly untouched here).
+app.get('/api/auth/verify', async c => {
+  if (!c.env.DB) {
+    console.log('TODO: DB binding missing — magic-link verification not available yet');
+    return c.json({ error: 'Not available yet.' }, 503);
+  }
+
+  const token = c.req.query('token');
+  if (!token) {
+    return c.json({ error: 'Missing token query parameter' }, 400);
+  }
+
+  const userId = await validateAndConsumeMagicLink(c.env.DB, token);
+  if (!userId) {
+    return c.json({ error: 'This link is invalid, expired, or already used.' }, 400);
+  }
+
+  if (!c.env.SESSION_SECRET) {
+    console.log('TODO: SESSION_SECRET missing — cannot issue a session cookie for user', userId);
+    return c.json({ ok: true, sessionIssued: false });
+  }
+
+  const expiresAtMs = Date.now() + SESSION_TTL_MS;
+  const sessionValue = await signSession({ userId, expiresAtMs }, c.env.SESSION_SECRET);
+  setCookie(c, SESSION_COOKIE, sessionValue, {
+    httpOnly: true,
+    secure: true,
+    sameSite: 'Lax',
+    path: '/',
+    maxAge: Math.floor(SESSION_TTL_MS / 1000),
+  });
+  return c.json({ ok: true, sessionIssued: true });
+});
+
+// ── Monitors CRUD ─────────────────────────────────────────────────────────────
+app.post('/api/monitors', async c => {
+  if (!c.env.DB) {
+    console.log('TODO: DB binding missing — monitoring not available yet');
+    return c.json({ error: 'Monitoring is not available yet.' }, 503);
+  }
+
+  const user = await requireAuth(c);
+  if (!user) {
+    return c.json({ error: 'Authentication required. Use a valid session cookie or API key.' }, 401);
+  }
+
+  let body: { url?: string; intervalSeconds?: number };
+  try {
+    body = await c.req.json();
+  } catch {
+    return c.json({ error: 'Expected JSON body with a url field' }, 400);
+  }
+
+  let parsedUrl: URL;
+  try {
+    parsedUrl = new URL((body.url ?? '').trim());
+  } catch {
+    return c.json({ error: 'A valid, absolute URL is required (e.g. https://myapp.vercel.app)' }, 400);
+  }
+  if (parsedUrl.protocol !== 'https:' && parsedUrl.protocol !== 'http:') {
+    return c.json({ error: 'Only http/https URLs can be monitored' }, 400);
+  }
+
+  // 5-15 min range per CEO brief (ADR §2 "Interval enforcement").
+  const intervalSeconds = body.intervalSeconds ?? 300;
+  if (intervalSeconds < 300 || intervalSeconds > 900) {
+    return c.json({ error: 'intervalSeconds must be between 300 (5 min) and 900 (15 min).' }, 400);
+  }
+
+  try {
+    const monitor = await insertMonitor(c.env.DB, { userId: user.id, url: parsedUrl.toString(), intervalSeconds });
+    return c.json({ monitor }, 201);
+  } catch (err) {
+    console.error('Failed to create monitor:', err);
+    return c.json({ error: 'Could not create monitor right now. Please try again.' }, 500);
+  }
+});
+
+// ── Billing: Stripe Checkout + webhook (ADR §5) ──────────────────────────────
+app.post('/api/checkout', async c => {
+  if (!c.env.STRIPE_SECRET_KEY || !c.env.STRIPE_WEBHOOK_SECRET || !c.env.STRIPE_PRICE_ID) {
+    console.log('TODO: Stripe secrets missing — checkout not available yet');
+    return c.json({ error: 'Checkout is not available yet.' }, 503);
+  }
+
+  let body: { email?: string; successUrl?: string; cancelUrl?: string };
+  try {
+    body = await c.req.json();
+  } catch {
+    return c.json({ error: 'Expected JSON body' }, 400);
+  }
+
+  const successUrl = body.successUrl ?? new URL('/checkout/success', c.req.url).toString();
+  const cancelUrl = body.cancelUrl ?? new URL('/', c.req.url).toString();
+
+  const gateway = createStripeGateway(c.env.STRIPE_SECRET_KEY, c.env.STRIPE_WEBHOOK_SECRET);
+  try {
+    const session = await gateway.createCheckoutSession({
+      priceId: c.env.STRIPE_PRICE_ID,
+      customerEmail: body.email,
+      successUrl,
+      cancelUrl,
+    });
+    return c.json({ id: session.id, url: session.url });
+  } catch (err) {
+    console.error('Stripe checkout session creation failed:', err);
+    return c.json({ error: 'Could not start checkout right now. Please try again.' }, 502);
+  }
+});
+
+app.post('/api/stripe/webhook', async c => {
+  if (!c.env.STRIPE_SECRET_KEY || !c.env.STRIPE_WEBHOOK_SECRET) {
+    console.log('TODO: Stripe secrets missing — webhook not available yet');
+    return c.json({ error: 'Webhook not configured' }, 503);
+  }
+
+  const signature = c.req.header('Stripe-Signature');
+  if (!signature) {
+    return c.json({ error: 'Missing Stripe-Signature header' }, 400);
+  }
+
+  const rawBody = await c.req.text();
+  const gateway = createStripeGateway(c.env.STRIPE_SECRET_KEY, c.env.STRIPE_WEBHOOK_SECRET);
+  const validSignature = await gateway.verifyWebhookSignature(rawBody, signature);
+  if (!validSignature) {
+    return c.json({ error: 'Invalid signature' }, 400);
+  }
+
+  let event: StripeWebhookEvent;
+  try {
+    event = JSON.parse(rawBody);
+  } catch {
+    return c.json({ error: 'Invalid JSON payload' }, 400);
+  }
+
+  const action = routeStripeEvent(event);
+
+  if (!c.env.DB) {
+    console.log('TODO: DB binding missing — would have applied Stripe webhook action:', action);
+    return c.json({ ok: true, applied: false });
+  }
+
+  try {
+    switch (action.kind) {
+      case 'upsert_user_from_checkout': {
+        const user = await upsertUserFromCheckout(c.env.DB, {
+          email: action.email,
+          stripeCustomerId: action.stripeCustomerId,
+          stripeSubscriptionId: action.stripeSubscriptionId,
+        });
+        const { token } = await createMagicLink(c.env.DB, user.id);
+        // STUB: no email provider is wired up yet (RESEND_API_KEY unset in
+        // every environment right now — see types.ts). The magic-link
+        // token/hash/expiry machinery itself (auth.ts) is fully implemented
+        // and unit-tested; only the "put it in an email" transport step is
+        // stubbed, same graceful-degradation style as WAITLIST/GITHUB_TOKEN —
+        // logged, not thrown, so an unconfigured deploy never 500s a
+        // paying customer's webhook.
+        console.log('TODO: email magic-link token to', user.email, '(RESEND_API_KEY not wired up yet):', token);
+        break;
+      }
+      case 'update_subscription_status':
+        await updateSubscriptionStatus(c.env.DB, action.stripeCustomerId, action.status);
+        // Pre-mortem finding #2 (docs/critic/vibecheck-monitoring-tier-premortem.md):
+        // monitoring now keeps running through 'past_due' (see fetchDueMonitors
+        // in monitors.ts), but the user still needs their own heads-up — Stripe's
+        // dunning email talks about the card, not about "your monitoring is still
+        // on for now." Same STUB pattern as the magic-link email above: logged,
+        // not thrown, until an email provider is wired up.
+        if (action.status === 'past_due') {
+          console.log(
+            'TODO: email payment-failed notice to Stripe customer',
+            action.stripeCustomerId,
+            '— monitoring continues during the grace period, RESEND_API_KEY not wired up yet'
+          );
+        }
+        break;
+      case 'ignored':
+        break;
+    }
+    return c.json({ ok: true, applied: action.kind !== 'ignored' });
+  } catch (err) {
+    console.error('Failed to apply Stripe webhook action:', err);
+    return c.json({ error: 'Failed to process webhook' }, 500);
+  }
+});
+
 // ── Health / ops ──────────────────────────────────────────────────────────────
 app.get('/health', c => c.json({ ok: true, ts: new Date().toISOString() }));
 
@@ -131,4 +390,79 @@ app.onError((err, c) => {
   return c.json({ error: 'Internal server error' }, 500);
 });
 
-export default app;
+// ── Cron Trigger: monitor due-queue polling + bounded fan-out (ADR §2) ──────
+// Fires every 1 minute (wrangler.toml [triggers]). Polls D1 for monitors due
+// for a check, probes each (bounded concurrency), records the check, updates
+// the monitor's next_check_at/consecutive_failures, and inserts alerts on
+// uptime state transitions (ADR §6 steps 5-7) and traffic anomalies (spec
+// §1.2). No-ops gracefully if DB isn't bound, same style as every other
+// binding check in this file.
+async function scheduled(_event: ScheduledEvent, env: Env, _ctx: ExecutionContext): Promise<void> {
+  const db = env.DB;
+  if (!db) {
+    console.log('TODO: DB binding missing — scheduled monitor checks skipped this tick');
+    return;
+  }
+
+  const nowIso = new Date().toISOString();
+  const due = await fetchDueMonitors(db, nowIso, DUE_QUEUE_LIMIT);
+  if (due.length === 0) return;
+
+  await runBoundedFanOut(
+    due,
+    async monitor => {
+      const probe = await probeUrl(monitor.url);
+      const check = buildCheckInsert(monitor.id, probe, nowIso);
+      await recordCheck(db, check);
+
+      const update = applyCheckResultToMonitor(monitor, check, nowIso);
+      await updateMonitorAfterCheck(db, monitor.id, update);
+
+      const openDown = await hasOpenDownAlert(db, monitor.id);
+      const transition = evaluateUptimeTransition({
+        ok: check.ok === 1,
+        consecutiveFailures: update.consecutive_failures,
+        hasOpenDownAlert: openDown,
+      });
+      if (transition === 'fire_down') {
+        await insertAlert(
+          db,
+          monitor.id,
+          'down',
+          JSON.stringify({ status: check.status_code, error: check.error }),
+          nowIso
+        );
+        // TODO: send a "your site is down" notification email (spec §4.1) —
+        // same stubbed-transport note as the checkout webhook above.
+      } else if (transition === 'fire_recovered') {
+        await resolveOpenDownAlert(db, monitor.id, nowIso);
+        await insertAlert(db, monitor.id, 'recovered', null, nowIso);
+        // TODO: send a "back to normal" notification email (spec §4.2).
+      }
+
+      // Traffic-anomaly proxy (product spec §1.2). KNOWN SIMPLIFICATION: v1's
+      // `checks` table (migrations/0001_init.sql) records latency/status per
+      // probe, not real per-endpoint request-volume — vibecheck's uptime
+      // probe has no visibility into the monitored app's actual traffic (see
+      // anomaly.ts's module doc and ADR §4). Trailing latency samples are
+      // used here as the "10x median" input to keep the alerting loop
+      // exercised end-to-end with the honest signal v1 actually has; a real
+      // volume signal (e.g. from the ADR §4-flagged future webhook-ingestion
+      // endpoint) can be swapped in later without touching the detection math.
+      const trailing = await fetchTrailingChecks(db, monitor.id, 7);
+      const verdict = detectTrafficAnomaly({
+        currentValue: check.latency_ms ?? 0,
+        trailingValues: trailing.map(c => c.latency_ms ?? 0),
+      });
+      if (verdict.isAnomaly) {
+        await insertAlert(db, monitor.id, 'latency_anomaly', JSON.stringify(verdict), nowIso);
+      }
+    },
+    20
+  );
+}
+
+export default {
+  fetch: app.fetch,
+  scheduled,
+};
