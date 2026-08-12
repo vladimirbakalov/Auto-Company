@@ -321,6 +321,13 @@ export const PATTERN_RULES: PatternRule[] = [
     // and body shape, no legitimate non-secret use.
     build: () => /\bdt0c01\.[A-Za-z0-9]{24}\.[A-Za-z0-9]{64}\b/g,
   },
+  {
+    id: "infracost-api-token",
+    description: "Infracost API token",
+    // ico- + 32 case-insensitive alphanumeric chars, exact length. Fixed
+    // prefix and body shape, no legitimate non-secret use.
+    build: () => /\bico-[A-Za-z0-9]{32}\b/g,
+  },
 ];
 
 /**

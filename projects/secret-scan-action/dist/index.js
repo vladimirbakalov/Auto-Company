@@ -33152,6 +33152,13 @@ exports.PATTERN_RULES = [
         // and body shape, no legitimate non-secret use.
         build: () => /\bdt0c01\.[A-Za-z0-9]{24}\.[A-Za-z0-9]{64}\b/g,
     },
+    {
+        id: "infracost-api-token",
+        description: "Infracost API token",
+        // ico- + 32 case-insensitive alphanumeric chars, exact length. Fixed
+        // prefix and body shape, no legitimate non-secret use.
+        build: () => /\bico-[A-Za-z0-9]{32}\b/g,
+    },
 ];
 /**
  * Variable-name fragment that makes a high-entropy value worth flagging.

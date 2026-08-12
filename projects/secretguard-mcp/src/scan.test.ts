@@ -362,6 +362,18 @@ describe("scanLine — true positives (known-leaked-secret patterns)", () => {
     expect(findings.some((f) => f.ruleId === "dynatrace-api-token")).toBe(false);
   });
 
+  it("flags an Infracost API token", () => {
+    const token = `ico-${"aB1cD2eF3".repeat(4).slice(0, 32)}`;
+    const findings = scanLine(line(`const INFRACOST_API_KEY = "${token}";`));
+    expect(findings.some((f) => f.ruleId === "infracost-api-token" && f.confidence === "high")).toBe(true);
+  });
+
+  it("does not flag an Infracost-shaped token that is one character short", () => {
+    const token = `ico-${"aB1cD2eF3".repeat(4).slice(0, 31)}`;
+    const findings = scanLine(line(`const INFRACOST_API_KEY = "${token}";`));
+    expect(findings.some((f) => f.ruleId === "infracost-api-token")).toBe(false);
+  });
+
   it("flags a generic high-entropy value assigned to a secret-like variable name", () => {
     const findings = scanLine(line(`const apiToken = "zT9pQ2xR7mK4vL8nW1sD6fH3jC0bA5eY";`));
     expect(findings.some((f) => f.ruleId === "generic-high-entropy-secret" && f.confidence === "generic")).toBe(
