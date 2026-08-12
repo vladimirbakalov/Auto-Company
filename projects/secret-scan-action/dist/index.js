@@ -33203,6 +33203,13 @@ exports.PATTERN_RULES = [
         // shape, no legitimate non-secret use.
         build: () => /\bAKCp[A-Za-z0-9]{69}\b/g,
     },
+    {
+        id: "artifactory-reference-token",
+        description: "Artifactory reference token",
+        // cmVmd + 59 alphanumeric chars, exact length. Fixed prefix and body
+        // shape, no legitimate non-secret use.
+        build: () => /\bcmVmd[A-Za-z0-9]{59}\b/g,
+    },
 ];
 /**
  * Variable-name fragment that makes a high-entropy value worth flagging.
