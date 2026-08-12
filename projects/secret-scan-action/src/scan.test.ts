@@ -592,6 +592,60 @@ describe("scanLine — true positives (known-leaked-secret patterns)", () => {
     expect(findings.some((f) => f.ruleId === "adafruit-api-key")).toBe(false);
   });
 
+  it("flags an Airtable-shaped value when the keyword 'airtable' is nearby", () => {
+    const value = "aB3fD1x9Qz".repeat(2).slice(0, 17).toLowerCase();
+    const findings = scanLine(line(`const airtable_key = "${value}";`));
+    expect(findings.some((f) => f.ruleId === "airtable-api-key" && f.confidence === "generic")).toBe(true);
+  });
+
+  it("does not flag a 17-char value shaped like an Airtable key without the keyword nearby", () => {
+    const value = "aB3fD1x9Qz".repeat(2).slice(0, 17).toLowerCase();
+    const findings = scanLine(line(`const unrelated_var = "${value}";`));
+    expect(findings.some((f) => f.ruleId === "airtable-api-key")).toBe(false);
+  });
+
+  it("does not flag an Airtable-shaped value that is one character short even with the keyword nearby", () => {
+    const value = "aB3fD1x9Qz".repeat(2).slice(0, 16).toLowerCase();
+    const findings = scanLine(line(`const airtable_key = "${value}";`));
+    expect(findings.some((f) => f.ruleId === "airtable-api-key")).toBe(false);
+  });
+
+  it("flags a Discord-token-shaped value when the keyword 'discord' is nearby", () => {
+    const value = "a".repeat(64);
+    const findings = scanLine(line(`const discord_token = "${value}";`));
+    expect(findings.some((f) => f.ruleId === "discord-api-token" && f.confidence === "generic")).toBe(true);
+  });
+
+  it("does not flag a 64-char hex value shaped like a Discord token without the keyword nearby", () => {
+    const value = "a".repeat(64);
+    const findings = scanLine(line(`const unrelated_var = "${value}";`));
+    expect(findings.some((f) => f.ruleId === "discord-api-token")).toBe(false);
+  });
+
+  it("does not flag a Discord-token-shaped value that is one character short even with the keyword nearby", () => {
+    const value = "a".repeat(63);
+    const findings = scanLine(line(`const discord_token = "${value}";`));
+    expect(findings.some((f) => f.ruleId === "discord-api-token")).toBe(false);
+  });
+
+  it("flags an Adobe-client-ID-shaped value when the keyword 'adobe' is nearby", () => {
+    const value = "b".repeat(32);
+    const findings = scanLine(line(`const adobe_client_id = "${value}";`));
+    expect(findings.some((f) => f.ruleId === "adobe-client-id" && f.confidence === "generic")).toBe(true);
+  });
+
+  it("does not flag a 32-char hex value shaped like an Adobe client ID without the keyword nearby", () => {
+    const value = "b".repeat(32);
+    const findings = scanLine(line(`const unrelated_var = "${value}";`));
+    expect(findings.some((f) => f.ruleId === "adobe-client-id")).toBe(false);
+  });
+
+  it("does not flag an Adobe-client-ID-shaped value that is one character short even with the keyword nearby", () => {
+    const value = "b".repeat(31);
+    const findings = scanLine(line(`const adobe_client_id = "${value}";`));
+    expect(findings.some((f) => f.ruleId === "adobe-client-id")).toBe(false);
+  });
+
   it("flags a generic high-entropy value assigned to a secret-like variable name", () => {
     const findings = scanLine(line(`const apiToken = "zT9pQ2xR7mK4vL8nW1sD6fH3jC0bA5eY";`));
     expect(findings.some((f) => f.ruleId === "generic-high-entropy-secret" && f.confidence === "generic")).toBe(

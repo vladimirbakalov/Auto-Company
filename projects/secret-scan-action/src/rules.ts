@@ -467,6 +467,41 @@ export const PATTERN_RULES: PatternRule[] = [
       /[\w.-]{0,50}?adafruit(?:[ \t\w.-]{0,20})[\s'"]{0,3}(?:=|>|:{1,3}=|\|\||:|=>|\?=|,)[`'"\s=]{0,5}([a-z0-9_-]{32})(?:[`'"\s;]|\\[nr]|$)/gi,
     confidence: "generic",
   },
+  {
+    id: "airtable-api-key",
+    description: "Airtable API Key (contextual)",
+    // Same keyword-proximity shape as adafruit-api-key above, second of the
+    // three follow-on candidates identified in Cycle #71 as sharing the
+    // exact same upstream regex skeleton. Value is a bare 17-char
+    // lowercase-alnum string, gated on "airtable" appearing before the
+    // assignment. "generic" tier for the same reason as adafruit: the
+    // 17-char value alone is not distinctive.
+    build: () =>
+      /[\w.-]{0,50}?airtable(?:[ \t\w.-]{0,20})[\s'"]{0,3}(?:=|>|:{1,3}=|\|\||:|=>|\?=|,)[`'"\s=]{0,5}([a-z0-9]{17})(?:[`'"\s;]|\\[nr]|$)/gi,
+    confidence: "generic",
+  },
+  {
+    id: "discord-api-token",
+    description: "Discord API Token (contextual)",
+    // Same keyword-proximity shape, third follow-on candidate from Cycle
+    // #71. Value is a bare 64-char hex string, gated on "discord" appearing
+    // before the assignment. "generic" tier: a 64-char hex string near the
+    // word "discord" could still be a hash or unrelated token.
+    build: () =>
+      /[\w.-]{0,50}?discord(?:[ \t\w.-]{0,20})[\s'"]{0,3}(?:=|>|:{1,3}=|\|\||:|=>|\?=|,)[`'"\s=]{0,5}([a-f0-9]{64})(?:[`'"\s;]|\\[nr]|$)/gi,
+    confidence: "generic",
+  },
+  {
+    id: "adobe-client-id",
+    description: "Adobe OAuth Web Client ID (contextual)",
+    // Same keyword-proximity shape, fourth follow-on candidate from Cycle
+    // #71. Value is a bare 32-char hex string, gated on "adobe" appearing
+    // before the assignment. "generic" tier: a 32-char hex string near the
+    // word "adobe" could still be a config ID, hash, or unrelated token.
+    build: () =>
+      /[\w.-]{0,50}?adobe(?:[ \t\w.-]{0,20})[\s'"]{0,3}(?:=|>|:{1,3}=|\|\||:|=>|\?=|,)[`'"\s=]{0,5}([a-f0-9]{32})(?:[`'"\s;]|\\[nr]|$)/gi,
+    confidence: "generic",
+  },
 ];
 
 /**
