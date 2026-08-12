@@ -11,6 +11,7 @@ import {
   app,
   scheduled,
   RECONCILIATION_CRON,
+  MONITOR_CHECK_CRON,
   SCAN_RATE_LIMIT,
   PROBE_CHECK_RATE_LIMIT,
   MONITORS_RATE_LIMIT,
@@ -578,5 +579,363 @@ describe('scheduled — reconciliation cron (RECONCILIATION_CRON) graceful degra
       expect.stringContaining('failed to read known Stripe customer ids from D1'),
       expect.any(Error)
     );
+  });
+});
+
+// ── Next Action #2: Resend email wiring ──────────────────────────────────
+// The four previously-stubbed "email transport" points (src/email.ts) now
+// actually call sendEmail. These tests exercise each call site through the
+// real route/cron entry point (not just email.ts in isolation, covered in
+// test/email.test.ts) to confirm the right recipient/content is resolved
+// from whatever data that call site actually has (Stripe webhook payload,
+// or a MonitorRow's user_id), and that a missing key / lookup gap degrades
+// gracefully — same graceful-degradation contract as every other optional
+// binding in this file.
+describe('POST /api/stripe/webhook — email wiring', () => {
+  const originalFetch = global.fetch;
+  const webhookSecret = 'whsec_test_secret';
+
+  afterEach(() => {
+    vi.restoreAllMocks();
+    global.fetch = originalFetch;
+  });
+
+  // Same signing helper as test/stripe.test.ts's verifyStripeSignature
+  // coverage — duplicated locally rather than imported/exported since
+  // it's ~15 lines and test-only (rule of three: not worth a shared module
+  // for two test files).
+  async function signPayload(payload: string, secret: string, timestamp: number): Promise<string> {
+    const signedPayload = `${timestamp}.${payload}`;
+    const key = await crypto.subtle.importKey(
+      'raw',
+      new TextEncoder().encode(secret),
+      { name: 'HMAC', hash: 'SHA-256' },
+      false,
+      ['sign']
+    );
+    const sigBytes = await crypto.subtle.sign('HMAC', key, new TextEncoder().encode(signedPayload));
+    const hex = Array.from(new Uint8Array(sigBytes))
+      .map(b => b.toString(16).padStart(2, '0'))
+      .join('');
+    return `t=${timestamp},v1=${hex}`;
+  }
+
+  async function postWebhook(env: Env, payload: object): Promise<Response> {
+    const body = JSON.stringify(payload);
+    const timestamp = Math.floor(Date.now() / 1000);
+    const signature = await signPayload(body, webhookSecret, timestamp);
+    return app.request(
+      '/api/stripe/webhook',
+      {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', 'Stripe-Signature': signature },
+        body,
+      },
+      env
+    );
+  }
+
+  const testUser: UserRow = {
+    id: 42,
+    email: 'founder@example.com',
+    stripe_customer_id: 'cus_ABC123',
+    stripe_subscription_id: 'sub_XYZ789',
+    subscription_status: 'active',
+    api_key_hash: null,
+    created_at: '2026-08-01T00:00:00.000Z',
+  };
+
+  // Fake D1: branches on the SQL text, same shortcut as fakeMonitorsDb above
+  // — these tests only need deterministic email-wiring behavior, not real
+  // persistence semantics.
+  function fakeWebhookDb(user: UserRow | null): D1Database {
+    return {
+      prepare: (sql: string) => ({
+        bind: () => ({
+          first: async <T>() => {
+            if (sql.includes('INSERT INTO users')) return user as unknown as T;
+            if (sql.includes('SELECT * FROM users WHERE stripe_customer_id')) return user as unknown as T;
+            return null as unknown as T;
+          },
+          run: async () => ({ success: true }) as unknown as D1Result,
+        }),
+      }),
+    } as unknown as D1Database;
+  }
+
+  const checkoutCompletedEvent = {
+    type: 'checkout.session.completed',
+    data: {
+      object: {
+        customer: 'cus_ABC123',
+        customer_email: 'founder@example.com',
+        customer_details: { email: 'founder@example.com' },
+        subscription: 'sub_XYZ789',
+      },
+    },
+  };
+
+  it('emails a magic link pointing at GET /api/auth/verify when RESEND_API_KEY is configured', async () => {
+    const resendMock = vi.fn(async (url: string, init?: RequestInit) => {
+      expect(url).toBe('https://api.resend.com/emails');
+      const body = JSON.parse(String(init?.body));
+      expect(body.to).toBe('founder@example.com');
+      expect(body.html).toContain('/api/auth/verify?token=');
+      return new Response(JSON.stringify({ id: 'email_1' }), { status: 200 });
+    });
+    global.fetch = resendMock as unknown as typeof fetch;
+
+    const env = {
+      STRIPE_SECRET_KEY: 'sk_test_fake',
+      STRIPE_WEBHOOK_SECRET: webhookSecret,
+      DB: fakeWebhookDb(testUser),
+      RESEND_API_KEY: 're_test_fake',
+    } as Env;
+
+    const res = await postWebhook(env, checkoutCompletedEvent);
+    expect(res.status).toBe(200);
+    expect(resendMock).toHaveBeenCalledTimes(1);
+  });
+
+  it('no-ops the magic-link email (logged TODO, no fetch) when RESEND_API_KEY is missing, and still applies the webhook', async () => {
+    const fetchMock = vi.fn();
+    global.fetch = fetchMock as unknown as typeof fetch;
+    const logSpy = vi.spyOn(console, 'log').mockImplementation(() => {});
+
+    const env = {
+      STRIPE_SECRET_KEY: 'sk_test_fake',
+      STRIPE_WEBHOOK_SECRET: webhookSecret,
+      DB: fakeWebhookDb(testUser),
+    } as Env;
+
+    const res = await postWebhook(env, checkoutCompletedEvent);
+    expect(res.status).toBe(200);
+    const body = (await res.json()) as { ok: boolean; applied: boolean };
+    expect(body).toEqual({ ok: true, applied: true });
+    expect(fetchMock).not.toHaveBeenCalled();
+    expect(logSpy).toHaveBeenCalledWith(
+      expect.stringContaining('RESEND_API_KEY not configured'),
+      'founder@example.com',
+      'subject:',
+      expect.any(String)
+    );
+  });
+
+  const pastDueEvent = {
+    type: 'invoice.payment_failed',
+    data: { object: { customer: 'cus_ABC123' } },
+  };
+
+  it('emails a payment-failed notice to the user resolved from stripe_customer_id on past_due', async () => {
+    const resendMock = vi.fn(async (url: string, init?: RequestInit) => {
+      expect(url).toBe('https://api.resend.com/emails');
+      const body = JSON.parse(String(init?.body));
+      expect(body.to).toBe('founder@example.com');
+      expect(body.html).toContain('grace period');
+      return new Response(JSON.stringify({ id: 'email_2' }), { status: 200 });
+    });
+    global.fetch = resendMock as unknown as typeof fetch;
+
+    const env = {
+      STRIPE_SECRET_KEY: 'sk_test_fake',
+      STRIPE_WEBHOOK_SECRET: webhookSecret,
+      DB: fakeWebhookDb(testUser),
+      RESEND_API_KEY: 're_test_fake',
+    } as Env;
+
+    const res = await postWebhook(env, pastDueEvent);
+    expect(res.status).toBe(200);
+    expect(resendMock).toHaveBeenCalledTimes(1);
+  });
+
+  it('logs the gap (no email sent) when no D1 user row matches the Stripe customer id', async () => {
+    const fetchMock = vi.fn();
+    global.fetch = fetchMock as unknown as typeof fetch;
+    const errorSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
+
+    const env = {
+      STRIPE_SECRET_KEY: 'sk_test_fake',
+      STRIPE_WEBHOOK_SECRET: webhookSecret,
+      DB: fakeWebhookDb(null),
+      RESEND_API_KEY: 're_test_fake',
+    } as Env;
+
+    const res = await postWebhook(env, pastDueEvent);
+    expect(res.status).toBe(200);
+    expect(fetchMock).not.toHaveBeenCalled();
+    expect(errorSpy).toHaveBeenCalledWith(
+      'Payment-failed notice: no D1 user row for Stripe customer',
+      'cus_ABC123',
+      expect.stringContaining('cannot resolve an email')
+    );
+  });
+
+  it('a Resend failure does not fail the webhook response', async () => {
+    global.fetch = vi.fn(async () => new Response('server error', { status: 500 })) as unknown as typeof fetch;
+    vi.spyOn(console, 'error').mockImplementation(() => {});
+
+    const env = {
+      STRIPE_SECRET_KEY: 'sk_test_fake',
+      STRIPE_WEBHOOK_SECRET: webhookSecret,
+      DB: fakeWebhookDb(testUser),
+      RESEND_API_KEY: 're_test_fake',
+    } as Env;
+
+    const res = await postWebhook(env, checkoutCompletedEvent);
+    expect(res.status).toBe(200);
+    const body = (await res.json()) as { ok: boolean };
+    expect(body.ok).toBe(true);
+  });
+});
+
+describe('scheduled — monitor cron (MONITOR_CHECK_CRON) down/recovered alert emails', () => {
+  const originalFetch = global.fetch;
+
+  afterEach(() => {
+    vi.restoreAllMocks();
+    global.fetch = originalFetch;
+  });
+
+  const baseMonitor: MonitorRow = {
+    id: 7,
+    user_id: 99,
+    url: 'https://myapp.example.com',
+    interval_seconds: 300,
+    next_check_at: '2026-08-12T00:00:00.000Z',
+    last_check_at: null,
+    last_status: 200,
+    consecutive_failures: 1,
+    paused: 0,
+    created_at: '2026-08-01T00:00:00.000Z',
+  };
+
+  // Fake D1 covering every query the fan-out worker touches for one due
+  // monitor: fetchDueMonitors, recordCheck, updateMonitorAfterCheck,
+  // hasOpenDownAlert, insertAlert, resolveOpenDownAlert, fetchTrailingChecks,
+  // and (new) findUserEmailById — branches on SQL text, same shortcut as
+  // fakeMonitorsDb/fakeWebhookDb above.
+  function fakeCronDb(opts: { monitor: MonitorRow; hasOpenDownAlert: boolean; userEmail: string | null }): D1Database {
+    return {
+      prepare: (sql: string) => ({
+        bind: () => ({
+          all: async <T>() => {
+            if (sql.includes('FROM monitors') && sql.includes('JOIN users')) {
+              return { results: [opts.monitor] } as unknown as { results: T[] };
+            }
+            return { results: [] } as unknown as { results: T[] };
+          },
+          first: async <T>() => {
+            if (sql.includes('INSERT INTO checks')) return { id: 1 } as unknown as T;
+            if (sql.startsWith('SELECT id FROM alerts')) {
+              return opts.hasOpenDownAlert ? ({ id: 1 } as unknown as T) : (null as unknown as T);
+            }
+            if (sql.includes('INSERT INTO alerts')) return { id: 1 } as unknown as T;
+            if (sql.includes('SELECT email FROM users')) {
+              return opts.userEmail ? ({ email: opts.userEmail } as unknown as T) : (null as unknown as T);
+            }
+            return null as unknown as T;
+          },
+          run: async () => ({ success: true }) as unknown as D1Result,
+        }),
+      }),
+    } as unknown as D1Database;
+  }
+
+  it('emails the monitor owner a down alert on the fire_down transition', async () => {
+    const fetchMock = vi.fn(async (input: RequestInit | string | URL) => {
+      const url = String(input);
+      if (url === 'https://api.resend.com/emails') {
+        return new Response(JSON.stringify({ id: 'email_3' }), { status: 200 });
+      }
+      // The monitored URL itself: simulate it being down.
+      throw new TypeError('fetch failed');
+    });
+    global.fetch = fetchMock as unknown as typeof fetch;
+
+    const env = {
+      DB: fakeCronDb({ monitor: baseMonitor, hasOpenDownAlert: false, userEmail: 'owner@example.com' }),
+      RESEND_API_KEY: 're_test_fake',
+    } as Env;
+
+    await expect(
+      scheduled(fakeScheduledEvent(MONITOR_CHECK_CRON), env, fakeExecutionContext())
+    ).resolves.toBeUndefined();
+
+    const resendCalls = fetchMock.mock.calls.filter(c => String(c[0]) === 'https://api.resend.com/emails');
+    expect(resendCalls).toHaveLength(1);
+    const resendBody = JSON.parse(String((resendCalls[0][1] as RequestInit).body));
+    expect(resendBody.to).toBe('owner@example.com');
+    expect(resendBody.subject).toContain('is down');
+  });
+
+  it('emails the monitor owner a recovered alert on the fire_recovered transition', async () => {
+    const fetchMock = vi.fn(async (input: RequestInit | string | URL) => {
+      const url = String(input);
+      if (url === 'https://api.resend.com/emails') {
+        return new Response(JSON.stringify({ id: 'email_4' }), { status: 200 });
+      }
+      // The monitored URL itself: simulate it being back up.
+      return new Response('ok', { status: 200 });
+    });
+    global.fetch = fetchMock as unknown as typeof fetch;
+
+    const recoveredMonitor: MonitorRow = { ...baseMonitor, consecutive_failures: 3 };
+    const env = {
+      DB: fakeCronDb({ monitor: recoveredMonitor, hasOpenDownAlert: true, userEmail: 'owner@example.com' }),
+      RESEND_API_KEY: 're_test_fake',
+    } as Env;
+
+    await expect(
+      scheduled(fakeScheduledEvent(MONITOR_CHECK_CRON), env, fakeExecutionContext())
+    ).resolves.toBeUndefined();
+
+    const resendCalls = fetchMock.mock.calls.filter(c => String(c[0]) === 'https://api.resend.com/emails');
+    expect(resendCalls).toHaveLength(1);
+    const resendBody = JSON.parse(String((resendCalls[0][1] as RequestInit).body));
+    expect(resendBody.to).toBe('owner@example.com');
+    expect(resendBody.subject).toContain('back up');
+  });
+
+  it('does not throw the cron tick when no user email is found for the monitor (fire_down)', async () => {
+    global.fetch = vi.fn(async () => {
+      throw new TypeError('fetch failed');
+    }) as unknown as typeof fetch;
+    const errorSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
+
+    const env = {
+      DB: fakeCronDb({ monitor: baseMonitor, hasOpenDownAlert: false, userEmail: null }),
+      RESEND_API_KEY: 're_test_fake',
+    } as Env;
+
+    await expect(
+      scheduled(fakeScheduledEvent(MONITOR_CHECK_CRON), env, fakeExecutionContext())
+    ).resolves.toBeUndefined();
+
+    expect(errorSpy).toHaveBeenCalledWith(
+      'Down alert: no user email found for monitor id',
+      baseMonitor.id,
+      'user_id',
+      baseMonitor.user_id
+    );
+  });
+
+  it('a Resend failure during the cron tick does not throw / abort the fan-out', async () => {
+    global.fetch = vi.fn(async (input: RequestInit | string | URL) => {
+      const url = String(input);
+      if (url === 'https://api.resend.com/emails') {
+        return new Response('server error', { status: 500 });
+      }
+      throw new TypeError('fetch failed');
+    }) as unknown as typeof fetch;
+    vi.spyOn(console, 'error').mockImplementation(() => {});
+
+    const env = {
+      DB: fakeCronDb({ monitor: baseMonitor, hasOpenDownAlert: false, userEmail: 'owner@example.com' }),
+      RESEND_API_KEY: 're_test_fake',
+    } as Env;
+
+    await expect(
+      scheduled(fakeScheduledEvent(MONITOR_CHECK_CRON), env, fakeExecutionContext())
+    ).resolves.toBeUndefined();
   });
 });

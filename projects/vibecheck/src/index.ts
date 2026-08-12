@@ -49,6 +49,8 @@ import {
 } from './monitors';
 import {
   findUserByApiKey,
+  findUserByStripeCustomerId,
+  findUserEmailById,
   updateSubscriptionStatus,
   upsertUserFromCheckout,
   validateAndConsumeMagicLink,
@@ -59,6 +61,7 @@ import {
 } from './auth';
 import { createStripeGateway, fetchActiveStripeCustomerIds, routeStripeEvent, type StripeWebhookEvent } from './stripe';
 import { fetchKnownStripeCustomerIds, findReconciliationGap } from './reconcile';
+import { sendEmail, magicLinkEmail, paymentFailedEmail, downAlertEmail, recoveredAlertEmail } from './email';
 
 const SESSION_COOKIE = 'vc_session';
 
@@ -489,14 +492,22 @@ app.post('/api/stripe/webhook', async c => {
           stripeSubscriptionId: action.stripeSubscriptionId,
         });
         const { token } = await createMagicLink(c.env.DB, user.id);
-        // STUB: no email provider is wired up yet (RESEND_API_KEY unset in
-        // every environment right now — see types.ts). The magic-link
-        // token/hash/expiry machinery itself (auth.ts) is fully implemented
-        // and unit-tested; only the "put it in an email" transport step is
-        // stubbed, same graceful-degradation style as WAITLIST/GITHUB_TOKEN —
-        // logged, not thrown, so an unconfigured deploy never 500s a
-        // paying customer's webhook.
-        console.log('TODO: email magic-link token to', user.email, '(RESEND_API_KEY not wired up yet):', token);
+        // The verify link's origin is derived from this very request's URL
+        // (same pattern as POST /api/checkout's successUrl/cancelUrl above)
+        // rather than a hardcoded per-environment hostname: Stripe posts
+        // this webhook straight at the deployed Worker, so c.req.url is
+        // already the correct public origin for whichever environment
+        // (dev/staging/production, per wrangler.toml) is handling it — one
+        // fewer piece of environment-specific config to keep in sync.
+        const verifyUrl = new URL('/api/auth/verify', c.req.url);
+        verifyUrl.searchParams.set('token', token);
+        const { subject, html } = magicLinkEmail(verifyUrl.toString());
+        const { sent } = await sendEmail(c.env.RESEND_API_KEY, { to: user.email, subject, html });
+        if (!sent) {
+          // sendEmail already logged why (missing key vs. provider error);
+          // this line adds the correlation id an ops triage actually needs.
+          console.error('Magic-link email not delivered for user id', user.id);
+        }
         break;
       }
       case 'update_subscription_status':
@@ -505,14 +516,33 @@ app.post('/api/stripe/webhook', async c => {
         // monitoring now keeps running through 'past_due' (see fetchDueMonitors
         // in monitors.ts), but the user still needs their own heads-up — Stripe's
         // dunning email talks about the card, not about "your monitoring is still
-        // on for now." Same STUB pattern as the magic-link email above: logged,
-        // not thrown, until an email provider is wired up.
+        // on for now."
         if (action.status === 'past_due') {
-          console.log(
-            'TODO: email payment-failed notice to Stripe customer',
-            action.stripeCustomerId,
-            '— monitoring continues during the grace period, RESEND_API_KEY not wired up yet'
-          );
+          // Fires on every 'past_due' webhook delivery with no dedup against
+          // the user's previously-stored status — Stripe's at-least-once
+          // delivery (retries) or a flapping subscription (past_due -> active
+          // -> past_due) can send more than one of these for what a human
+          // would call "the same failure." Accepted for now: a redundant
+          // dunning reminder is a much smaller cost than a missed one, and
+          // dedup would need its own persisted "last notified" state. Revisit
+          // if this turns out to be noisy in practice.
+          //
+          // The webhook event only carries a Stripe customer id, not an
+          // email — look the user up in D1 rather than inventing one.
+          const user = await findUserByStripeCustomerId(c.env.DB, action.stripeCustomerId);
+          if (user) {
+            const { subject, html } = paymentFailedEmail();
+            const { sent } = await sendEmail(c.env.RESEND_API_KEY, { to: user.email, subject, html });
+            if (!sent) {
+              console.error('Payment-failed email not delivered for user id', user.id);
+            }
+          } else {
+            console.error(
+              'Payment-failed notice: no D1 user row for Stripe customer',
+              action.stripeCustomerId,
+              '— cannot resolve an email to notify (reconciliation-cron should also flag this gap).'
+            );
+          }
         }
         break;
       case 'ignored':
@@ -643,12 +673,38 @@ async function scheduled(event: ScheduledEvent, env: Env, _ctx: ExecutionContext
           JSON.stringify({ status: check.status_code, error: check.error }),
           nowIso
         );
-        // TODO: send a "your site is down" notification email (spec §4.1) —
-        // same stubbed-transport note as the checkout webhook above.
+        // Spec §4.1: notify the monitor's owner. `monitor.user_id` is
+        // already on the row (migrations/0001_init.sql FK) — one lookup for
+        // the email, no join needed.
+        const downEmail = await findUserEmailById(db, monitor.user_id);
+        if (downEmail) {
+          const { subject, html } = downAlertEmail(monitor.url);
+          const { sent } = await sendEmail(env.RESEND_API_KEY, { to: downEmail, subject, html });
+          if (!sent) {
+            console.error('Down alert email not delivered for monitor id', monitor.id);
+          }
+        } else {
+          console.error('Down alert: no user email found for monitor id', monitor.id, 'user_id', monitor.user_id);
+        }
       } else if (transition === 'fire_recovered') {
         await resolveOpenDownAlert(db, monitor.id, nowIso);
         await insertAlert(db, monitor.id, 'recovered', null, nowIso);
-        // TODO: send a "back to normal" notification email (spec §4.2).
+        // Spec §4.2.
+        const recoveredEmail = await findUserEmailById(db, monitor.user_id);
+        if (recoveredEmail) {
+          const { subject, html } = recoveredAlertEmail(monitor.url);
+          const { sent } = await sendEmail(env.RESEND_API_KEY, { to: recoveredEmail, subject, html });
+          if (!sent) {
+            console.error('Recovered alert email not delivered for monitor id', monitor.id);
+          }
+        } else {
+          console.error(
+            'Recovered alert: no user email found for monitor id',
+            monitor.id,
+            'user_id',
+            monitor.user_id
+          );
+        }
       }
 
       // Traffic-anomaly proxy (product spec §1.2). KNOWN SIMPLIFICATION: v1's

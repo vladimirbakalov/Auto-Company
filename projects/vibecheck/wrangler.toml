@@ -105,3 +105,13 @@ ENVIRONMENT = "staging"
 name = "vibecheck"
 [env.production.vars]
 ENVIRONMENT = "production"
+
+# TODO(devops): the magic-link email (src/index.ts, POST /api/stripe/webhook)
+# builds its link from `new URL('/api/auth/verify', c.req.url)` — i.e.
+# whatever origin Stripe's dashboard has configured as this environment's
+# webhook endpoint, not a hardcoded domain. That's correct only if the
+# configured webhook URL is the same public/branded domain real users hit.
+# Before relying on magic-link emails looking right, confirm in the Stripe
+# dashboard that each environment's webhook endpoint points at its real
+# custom domain, not a raw *.workers.dev URL — otherwise emails still work
+# (same Worker, same D1) but link out to an unbranded/internal-looking host.

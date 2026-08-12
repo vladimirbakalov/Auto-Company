@@ -184,3 +184,24 @@ export async function findUserByApiKey(db: D1Database, apiKey: string): Promise<
   const user = await db.prepare('SELECT * FROM users WHERE api_key_hash = ?1').bind(hash).first<UserRow>();
   return user ?? null;
 }
+
+// Resolves a Stripe customer id to a user row — used by the webhook's
+// `past_due` handler (index.ts) to find an email address to notify, since
+// the `invoice.payment_failed`/`customer.subscription.updated` events only
+// carry `customer`, not an email.
+export async function findUserByStripeCustomerId(db: D1Database, stripeCustomerId: string): Promise<UserRow | null> {
+  const user = await db
+    .prepare('SELECT * FROM users WHERE stripe_customer_id = ?1')
+    .bind(stripeCustomerId)
+    .first<UserRow>();
+  return user ?? null;
+}
+
+// Resolves a user id to just their email — used by the scheduled monitor
+// fan-out (index.ts) to notify a monitor's owner on down/recovered
+// transitions. Monitors already carry `user_id` (migrations/0001_init.sql
+// FK), so this is a single-row lookup by primary key, not a join.
+export async function findUserEmailById(db: D1Database, userId: number): Promise<string | null> {
+  const user = await db.prepare('SELECT email FROM users WHERE id = ?1').bind(userId).first<{ email: string }>();
+  return user?.email ?? null;
+}
