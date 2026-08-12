@@ -266,6 +266,16 @@ export const PATTERN_RULES: PatternRule[] = [
     // exact length, no legitimate non-secret use of this shape.
     build: () => /\bdp\.pt\.[a-zA-Z0-9]{43}\b/g,
   },
+  {
+    id: "planetscale-api-token",
+    description: "PlanetScale API token",
+    // pscale_tkn_ + 32-64 word/dot/equals/hyphen chars. Body length is
+    // variable (mirrors gitleaks' own {32,64} bound) rather than fixed, but
+    // the 11-char prefix is unusual and distinctive enough on its own that
+    // this stays high confidence, same as every other fixed-prefix rule
+    // above.
+    build: () => /\bpscale_tkn_[\w.=-]{32,64}\b/g,
+  },
 ];
 
 /**

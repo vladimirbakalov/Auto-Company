@@ -266,6 +266,24 @@ describe("scanLine — true positives (known-leaked-secret patterns)", () => {
     expect(findings.some((f) => f.ruleId === "doppler-api-token")).toBe(false);
   });
 
+  it("flags a PlanetScale API token at the minimum body length", () => {
+    const token = `pscale_tkn_${"a1B2c3D4e5".repeat(4).slice(0, 32)}`; // 32 chars
+    const findings = scanLine(line(`const PLANETSCALE_TOKEN = "${token}";`));
+    expect(findings.some((f) => f.ruleId === "planetscale-api-token" && f.confidence === "high")).toBe(true);
+  });
+
+  it("flags a PlanetScale API token at the maximum body length", () => {
+    const token = `pscale_tkn_${"a1B2c3D4e5".repeat(7).slice(0, 64)}`; // 64 chars
+    const findings = scanLine(line(`const PLANETSCALE_TOKEN = "${token}";`));
+    expect(findings.some((f) => f.ruleId === "planetscale-api-token" && f.confidence === "high")).toBe(true);
+  });
+
+  it("does not flag a PlanetScale-shaped token whose body is one character short of the minimum", () => {
+    const token = `pscale_tkn_${"a1B2c3D4e5".repeat(4).slice(0, 31)}`; // 31 chars
+    const findings = scanLine(line(`const PLANETSCALE_TOKEN = "${token}";`));
+    expect(findings.some((f) => f.ruleId === "planetscale-api-token")).toBe(false);
+  });
+
   it("flags a generic high-entropy value assigned to a secret-like variable name", () => {
     const findings = scanLine(line(`const apiToken = "zT9pQ2xR7mK4vL8nW1sD6fH3jC0bA5eY";`));
     expect(findings.some((f) => f.ruleId === "generic-high-entropy-secret" && f.confidence === "generic")).toBe(
