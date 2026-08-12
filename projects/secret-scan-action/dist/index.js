@@ -33069,6 +33069,13 @@ exports.PATTERN_RULES = [
         // length, no legitimate non-secret use of this shape.
         build: () => /\brdme_[a-z0-9]{70}\b/g,
     },
+    {
+        id: "clojars-api-token",
+        description: "Clojars API token",
+        // CLOJARS_ (case-insensitive) + 60 alphanumeric chars, fixed prefix and
+        // exact length, no legitimate non-secret use of this shape.
+        build: () => /\bCLOJARS_[a-z0-9]{60}\b/gi,
+    },
 ];
 /**
  * Variable-name fragment that makes a high-entropy value worth flagging.

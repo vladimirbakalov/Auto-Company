@@ -218,6 +218,12 @@ describe("scanLine — true positives (known-leaked-secret patterns)", () => {
     expect(findings.some((f) => f.ruleId === "readme-api-key" && f.confidence === "high")).toBe(true);
   });
 
+  it("flags a Clojars API token", () => {
+    const token = `CLOJARS_${"a1b2c3d4e5".repeat(6)}`; // 60 alphanumeric
+    const findings = scanLine(line(`const CLOJARS_TOKEN = "${token}";`));
+    expect(findings.some((f) => f.ruleId === "clojars-api-token" && f.confidence === "high")).toBe(true);
+  });
+
   it("flags a generic high-entropy value assigned to a secret-like variable name", () => {
     const findings = scanLine(line(`const apiToken = "zT9pQ2xR7mK4vL8nW1sD6fH3jC0bA5eY";`));
     expect(findings.some((f) => f.ruleId === "generic-high-entropy-secret" && f.confidence === "generic")).toBe(
@@ -260,6 +266,7 @@ describe("scanLine — no false positives on clean code", () => {
     `const workspaceKey = "PMAK-${"a".repeat(23)}-${"b".repeat(34)}"`, // one hex char short of a real Postman token
     `const teamKey = "lin_api_${"a".repeat(39)}"`, // one alnum char short of a real Linear API key
     `const docsKey = "rdme_${"a".repeat(69)}"`, // one alnum char short of a real Readme API key
+    `const releaseToken = "CLOJARS_${"a".repeat(59)}"`, // one alnum char short of a real Clojars API token
   ];
 
   it.each(cleanLines)("flags nothing for: %s", (content) => {
