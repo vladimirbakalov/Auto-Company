@@ -130,6 +130,21 @@ the same way.
 Once this package is published to npm, the `args` above can drop to
 `["-y", "secretguard-mcp"]` instead — that's a follow-up, not a blocker.
 
+### One-click install (.mcpb)
+
+A prebuilt [MCP Bundle](https://github.com/modelcontextprotocol/mcpb) is
+attached to the
+[`v0.1.0-mcpb` release](https://github.com/vladimirbakalov/secretguard-mcp/releases/tag/v0.1.0-mcpb) —
+download `secretguard-mcp-0.1.0.mcpb` and open it in Claude Desktop (or any
+other MCPB-compatible client) for a one-click local install, no `npx`/Node
+setup required on the client side. Rebuild it yourself with
+`npm run package:mcpb` (see `scripts/build-mcpb.sh`).
+
+This same `.mcpb` release asset is what `server.json` at the repo root points
+at for the [official MCP Registry](https://registry.modelcontextprotocol.io/)
+— publishing there is prepared but not yet done, since it requires a one-time
+interactive `mcp-publisher login github` device-flow authorization.
+
 ## Security notes
 
 - The raw secret value matched by a rule is held in memory only for the

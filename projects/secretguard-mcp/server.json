@@ -1,0 +1,20 @@
+{
+  "$schema": "https://static.modelcontextprotocol.io/schemas/2025-12-11/server.schema.json",
+  "name": "io.github.vladimirbakalov/secretguard-mcp",
+  "description": "Scans code for hardcoded secrets (AWS/Stripe/GitHub/Google/Slack keys, private keys, JWTs, high-entropy credentials) before an AI coding agent writes or commits it. Zero-config, no API key, runs locally over stdio.",
+  "repository": {
+    "url": "https://github.com/vladimirbakalov/secretguard-mcp",
+    "source": "github"
+  },
+  "version": "0.1.0",
+  "packages": [
+    {
+      "registryType": "mcpb",
+      "identifier": "https://github.com/vladimirbakalov/secretguard-mcp/releases/download/v0.1.0-mcpb/secretguard-mcp-0.1.0.mcpb",
+      "fileSha256": "289fabc69b2b220b733d63124596957169880b706e3314f1e907b4d42c3f6ce0",
+      "transport": {
+        "type": "stdio"
+      }
+    }
+  ]
+}
