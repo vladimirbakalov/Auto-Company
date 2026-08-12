@@ -212,6 +212,12 @@ describe("scanLine — true positives (known-leaked-secret patterns)", () => {
     expect(findings.some((f) => f.ruleId === "linear-api-key" && f.confidence === "high")).toBe(true);
   });
 
+  it("flags a Readme API key", () => {
+    const token = `rdme_${"a1b2c3d4e5".repeat(7)}`; // 70 lowercase alphanumeric
+    const findings = scanLine(line(`const README_API_KEY = "${token}";`));
+    expect(findings.some((f) => f.ruleId === "readme-api-key" && f.confidence === "high")).toBe(true);
+  });
+
   it("flags a generic high-entropy value assigned to a secret-like variable name", () => {
     const findings = scanLine(line(`const apiToken = "zT9pQ2xR7mK4vL8nW1sD6fH3jC0bA5eY";`));
     expect(findings.some((f) => f.ruleId === "generic-high-entropy-secret" && f.confidence === "generic")).toBe(
@@ -253,6 +259,7 @@ describe("scanLine — no false positives on clean code", () => {
     `const dbId = "ntn_${"1".repeat(11)}${"a".repeat(34)}"`, // one alnum char short of a real Notion token
     `const workspaceKey = "PMAK-${"a".repeat(23)}-${"b".repeat(34)}"`, // one hex char short of a real Postman token
     `const teamKey = "lin_api_${"a".repeat(39)}"`, // one alnum char short of a real Linear API key
+    `const docsKey = "rdme_${"a".repeat(69)}"`, // one alnum char short of a real Readme API key
   ];
 
   it.each(cleanLines)("flags nothing for: %s", (content) => {

@@ -33062,6 +33062,13 @@ exports.PATTERN_RULES = [
         // legitimate non-secret use of this shape.
         build: () => /\blin_api_[A-Za-z0-9]{40}\b/g,
     },
+    {
+        id: "readme-api-key",
+        description: "Readme API key",
+        // rdme_ + 70 lowercase alphanumeric chars, fixed prefix and exact
+        // length, no legitimate non-secret use of this shape.
+        build: () => /\brdme_[a-z0-9]{70}\b/g,
+    },
 ];
 /**
  * Variable-name fragment that makes a high-entropy value worth flagging.
