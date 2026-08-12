@@ -302,6 +302,18 @@ describe("scanLine — true positives (known-leaked-secret patterns)", () => {
     expect(findings.some((f) => f.ruleId === "databricks-api-token")).toBe(false);
   });
 
+  it("flags a Frame.io API token", () => {
+    const token = `fio-u-${"aB1-_=cD2".repeat(8).slice(0, 64)}`; // 64 chars
+    const findings = scanLine(line(`const FRAMEIO_TOKEN = "${token}";`));
+    expect(findings.some((f) => f.ruleId === "frameio-api-token" && f.confidence === "high")).toBe(true);
+  });
+
+  it("does not flag a Frame.io-shaped token whose body is one character short", () => {
+    const token = `fio-u-${"aB1-_=cD2".repeat(8).slice(0, 63)}`; // 63 chars
+    const findings = scanLine(line(`const FRAMEIO_TOKEN = "${token}";`));
+    expect(findings.some((f) => f.ruleId === "frameio-api-token")).toBe(false);
+  });
+
   it("flags a generic high-entropy value assigned to a secret-like variable name", () => {
     const findings = scanLine(line(`const apiToken = "zT9pQ2xR7mK4vL8nW1sD6fH3jC0bA5eY";`));
     expect(findings.some((f) => f.ruleId === "generic-high-entropy-secret" && f.confidence === "generic")).toBe(

@@ -284,6 +284,13 @@ export const PATTERN_RULES: PatternRule[] = [
     // legitimate non-secret use.
     build: () => /\bdapi[a-f0-9]{32}(?:-\d)?\b/g,
   },
+  {
+    id: "frameio-api-token",
+    description: "Frame.io API token",
+    // fio-u- + 64 alphanumeric/-/_/= chars, exact length. Fixed prefix
+    // and body shape, no legitimate non-secret use.
+    build: () => /\bfio-u-[A-Za-z0-9\-_=]{64}\b/g,
+  },
 ];
 
 /**
