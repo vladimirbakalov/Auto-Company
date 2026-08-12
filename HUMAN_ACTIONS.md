@@ -23,6 +23,10 @@ anti-spam/self-promo norms are stricter and different from HN/IH):
   across all 3 products, with per-subreddit fit/risk notes and posting
   hygiene guidance — read the top-of-file notes before posting, especially
   "don't crosspost the same title/body same-day")
+- `docs/marketing/devto-secret-detection-cycle29.md` (technical deep-dive
+  covering secret-scan-action + secretguard-mcp together — different from
+  the forum posts above: evergreen/SEO content, not a one-shot pitch. Has
+  its own front-matter + posting-hygiene notes at the top of the file.)
 
 Just copy-paste into Show HN, Show IH, and/or the relevant subreddits (one
 post per product/channel, or pick the one you think is most interesting to
