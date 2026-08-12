@@ -27,6 +27,13 @@ anti-spam/self-promo norms are stricter and different from HN/IH):
   covering secret-scan-action + secretguard-mcp together — different from
   the forum posts above: evergreen/SEO content, not a one-shot pitch. Has
   its own front-matter + posting-hygiene notes at the top of the file.)
+- `docs/marketing/devto-pr-summary-cycle30.md` (technical deep-dive
+  covering pr-summary-action's diff-budgeting algorithm, baseURL-hijack
+  prevention, error sanitization, and idempotent-comment pattern — same
+  evergreen/SEO dev.to format as the Cycle 29 piece, for the third live
+  product. Has its own front-matter + posting-hygiene notes, including a
+  tag choice and posting-day spacing so it doesn't compete with the Cycle
+  29 piece.)
 
 Just copy-paste into Show HN, Show IH, and/or the relevant subreddits (one
 post per product/channel, or pick the one you think is most interesting to
