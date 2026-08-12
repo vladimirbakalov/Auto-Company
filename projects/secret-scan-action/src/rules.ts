@@ -379,6 +379,14 @@ export const PATTERN_RULES: PatternRule[] = [
     // shape, no legitimate non-secret use.
     build: () => /\bcmVmd[A-Za-z0-9]{59}\b/g,
   },
+  {
+    id: "cloudflare-origin-ca-key",
+    description: "Cloudflare Origin CA Key",
+    // v1.0- + 24 hex chars + - + 146 hex chars, exact lengths. The
+    // combined shape (fixed prefix, two hex segments of exact length) is
+    // distinctive even though "v1.0-" alone isn't.
+    build: () => /\bv1\.0-[a-f0-9]{24}-[a-f0-9]{146}\b/g,
+  },
 ];
 
 /**

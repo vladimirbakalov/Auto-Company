@@ -460,6 +460,20 @@ describe("scanLine — true positives (known-leaked-secret patterns)", () => {
     expect(findings.some((f) => f.ruleId === "artifactory-reference-token")).toBe(false);
   });
 
+  it("flags a Cloudflare Origin CA Key", () => {
+    const frag = "ab12cd34ef56";
+    const token = `v1.0-${frag.repeat(3).slice(0, 24)}-${frag.repeat(13).slice(0, 146)}`;
+    const findings = scanLine(line(`const CF_ORIGIN_CA_KEY = "${token}";`));
+    expect(findings.some((f) => f.ruleId === "cloudflare-origin-ca-key" && f.confidence === "high")).toBe(true);
+  });
+
+  it("does not flag a Cloudflare-Origin-CA-Key-shaped token that is one character short", () => {
+    const frag = "ab12cd34ef56";
+    const token = `v1.0-${frag.repeat(3).slice(0, 24)}-${frag.repeat(13).slice(0, 145)}`;
+    const findings = scanLine(line(`const CF_ORIGIN_CA_KEY = "${token}";`));
+    expect(findings.some((f) => f.ruleId === "cloudflare-origin-ca-key")).toBe(false);
+  });
+
   it("flags a generic high-entropy value assigned to a secret-like variable name", () => {
     const findings = scanLine(line(`const apiToken = "zT9pQ2xR7mK4vL8nW1sD6fH3jC0bA5eY";`));
     expect(findings.some((f) => f.ruleId === "generic-high-entropy-secret" && f.confidence === "generic")).toBe(
