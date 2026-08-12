@@ -33048,6 +33048,13 @@ exports.PATTERN_RULES = [
         build: () => /\bmailchimp[a-z0-9_.-]{0,20}\s*[:=]\s*["'`]?([a-f0-9]{32}-us\d{1,2})\b["'`]?/gi,
         confidence: "generic",
     },
+    {
+        id: "postman-api-token",
+        description: "Postman API token",
+        // PMAK- + 24 hex + "-" + 34 hex, fixed prefix and exact length, no
+        // legitimate non-secret use of this shape.
+        build: () => /\bPMAK-[A-Fa-f0-9]{24}-[A-Fa-f0-9]{34}\b/g,
+    },
 ];
 /**
  * Variable-name fragment that makes a high-entropy value worth flagging.

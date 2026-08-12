@@ -4,11 +4,11 @@ A free GitHub Action that scans a pull request's **changed lines only** for
 leaked secrets — AWS keys, Stripe keys, GitHub tokens, Google API keys and
 OAuth client secrets, Slack tokens and incoming webhook URLs, Shopify access
 tokens, Telegram bot tokens, DigitalOcean tokens, Hugging Face tokens,
-Notion API tokens, Mailchimp API keys, OpenAI keys, Anthropic
-keys, npm access tokens, SendGrid keys, Twilio API keys, Azure Storage
-account keys, database connection strings with embedded passwords, private
-key blocks, JWTs, and generic high-entropy credentials — and fails the
-check when it finds a
+Notion API tokens, Mailchimp API keys, Postman API tokens, OpenAI keys,
+Anthropic keys, npm access tokens, SendGrid keys, Twilio API keys, Azure
+Storage account keys, database connection strings with embedded passwords,
+private key blocks, JWTs, and generic high-entropy credentials — and fails
+the check when it finds a
 confirmed one. It works out of the box with zero configuration and no API
 key. Optionally, bring your own Anthropic API key to have Claude triage the
 small set of ambiguous matches and cut noise.
@@ -55,7 +55,9 @@ On every `pull_request` event:
      `-usNN` datacenter suffix) — is also generic confidence: it only fires
      when a `mailchimp`-prefixed variable/key name immediately precedes the
      value, but that keyword gate still doesn't rule out an unrelated hex
-     value that happens to end in the same suffix shape.
+     value that happens to end in the same suffix shape. Postman API tokens
+     (`PMAK-...`, 24-char hex + `-` + 34-char hex) are high confidence — a
+     fixed prefix and exact length, same as the other provider-token rules.
    - **Generic entropy rule** — a value assigned to a variable named like
      `secret`, `token`, `password`/`credential`, or a `*key` compound
      commonly used for real secret material (`apiKey`, `sessionKey`,

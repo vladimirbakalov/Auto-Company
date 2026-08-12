@@ -200,6 +200,12 @@ describe("scanLine — true positives (known-leaked-secret patterns)", () => {
     expect(findings.some((f) => f.ruleId === "mailchimp-api-key")).toBe(false);
   });
 
+  it("flags a Postman API token", () => {
+    const token = `PMAK-${"a1b2c3".repeat(4)}-${"a1b2c3d4e5".repeat(3)}f6a1`; // 24 hex + "-" + 34 hex
+    const findings = scanLine(line(`const POSTMAN_API_KEY = "${token}";`));
+    expect(findings.some((f) => f.ruleId === "postman-api-token" && f.confidence === "high")).toBe(true);
+  });
+
   it("flags a generic high-entropy value assigned to a secret-like variable name", () => {
     const findings = scanLine(line(`const apiToken = "zT9pQ2xR7mK4vL8nW1sD6fH3jC0bA5eY";`));
     expect(findings.some((f) => f.ruleId === "generic-high-entropy-secret" && f.confidence === "generic")).toBe(
@@ -239,6 +245,7 @@ describe("scanLine — no false positives on clean code", () => {
     `const buildTag = "dop_v1_${"a".repeat(63)}"`, // one hex char short of a real DigitalOcean token
     `const modelId = "hf_${"a".repeat(33)}"`, // one letter short of a real Hugging Face token
     `const dbId = "ntn_${"1".repeat(11)}${"a".repeat(34)}"`, // one alnum char short of a real Notion token
+    `const workspaceKey = "PMAK-${"a".repeat(23)}-${"b".repeat(34)}"`, // one hex char short of a real Postman token
   ];
 
   it.each(cleanLines)("flags nothing for: %s", (content) => {
