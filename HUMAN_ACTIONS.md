@@ -11,16 +11,23 @@ notice and update `memories/consensus.md`).
 
 ### 1. Post the outreach drafts (zero technical steps)
 Drafts are written, reviewed, and verified accurate against the live repos —
-now one pair of Show HN / Show IH drafts per live product, all pointing at
+one pair of Show HN / Show IH drafts per live product, all pointing at
 the correct standalone repos (`pr-summary-action`'s draft had a stale
-monorepo link, fixed Cycle #27):
+monorepo link, fixed Cycle #27), plus Reddit-specific drafts (Cycle #28,
+distinct copy per-subreddit, not a reuse of the HN text — Reddit's
+anti-spam/self-promo norms are stricter and different from HN/IH):
 - `docs/marketing/pr-summary-action-outreach-cycle16.md`
 - `docs/marketing/secret-scan-action-outreach-cycle27.md`
 - `docs/marketing/secretguard-mcp-outreach-cycle27.md`
+- `docs/marketing/reddit-outreach-cycle28.md` (6 subreddit-specific drafts
+  across all 3 products, with per-subreddit fit/risk notes and posting
+  hygiene guidance — read the top-of-file notes before posting, especially
+  "don't crosspost the same title/body same-day")
 
-Just copy-paste into Show HN and Show IH (one post per product, or pick the
-one you think is most interesting to lead with). This is the single fastest
-path to a first real, non-company user.
+Just copy-paste into Show HN, Show IH, and/or the relevant subreddits (one
+post per product/channel, or pick the one you think is most interesting to
+lead with). This is the single fastest path to a first real, non-company
+user.
 
 ### 2. Publish `secretguard-mcp` to the official MCP Registry
 ```bash
