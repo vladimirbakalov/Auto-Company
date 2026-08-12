@@ -33277,6 +33277,24 @@ exports.PATTERN_RULES = [
         build: () => /\b4b1d[A-Za-z0-9]{38}\b/g,
         confidence: "generic",
     },
+    {
+        id: "adafruit-api-key",
+        description: "Adafruit API Key (contextual)",
+        // First rule of a genuinely different shape than everything above: no
+        // fixed prefix on the secret itself. Adafruit keys are bare 32-char
+        // lowercase-alnum/underscore/hyphen strings, indistinguishable from
+        // countless other 32-char tokens on their own — the only signal is the
+        // word "adafruit" appearing within ~70 chars before an assignment
+        // operator. Ported from upstream gitleaks' keyword-proximity shape
+        // (`[\w.-]{0,50}?(?:keyword)[\w.\s-]{0,20}[assignment-op][quote/space]{0,5}(value)`),
+        // which several dozen other upstream rules also use (airtable-api-key,
+        // discord-api-token, etc. — see Cycle #58/#71 notes) and none of which
+        // had been ported before this one. "generic" tier, not "high": even
+        // with the keyword gate, a 32-char value near the word "adafruit" could
+        // be a config key name, a hash, or another non-secret token.
+        build: () => /[\w.-]{0,50}?adafruit(?:[ \t\w.-]{0,20})[\s'"]{0,3}(?:=|>|:{1,3}=|\|\||:|=>|\?=|,)[`'"\s=]{0,5}([a-z0-9_-]{32})(?:[`'"\s;]|\\[nr]|$)/gi,
+        confidence: "generic",
+    },
 ];
 /**
  * Variable-name fragment that makes a high-entropy value worth flagging.

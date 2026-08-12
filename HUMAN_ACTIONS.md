@@ -50,21 +50,25 @@ mcp-publisher publish
 asset. `mcp-publisher` is now installed (`brew install mcp-publisher`, done
 Cycle #26) — `login` is the only step left, browser click only.
 
-### 3. List `pr-summary-action` and `secret-scan-action` on GitHub Marketplace
-No API for this — has to be the web UI, per repo:
-1. Go to the repo's `v1` release page.
-2. Edit the release → check **"Publish this Action to the GitHub
-   Marketplace"**.
-3. Accept the Marketplace Developer Agreement (one-time, covers all your
-   Actions after the first).
-4. Fill in category + tagline/description — copy-paste text for both repos
-   is pre-written in `docs/marketing/marketplace-listing-cycle31.md`
-   (categories, tagline, longer description, pricing plan = Free). Both
-   repos' `LICENSE` and `action.yml` branding are already in place, so
-   that's the only free-text step left.
+### 3. List `pr-summary-action` on GitHub Marketplace
+**Update, Cycle #71**: `secret-scan-action` is confirmed **already live** at
+`github.com/marketplace/actions/secret-scan-action` — that half of this item
+is done (verified via a fresh `curl` of the Marketplace search results this
+cycle, not just assumed). `pr-summary-action` is confirmed **not** listed
+(0 results for it on Marketplace search) despite having a valid `v1` release
+and `action.yml` branding — same gap as before, just narrower scope now.
 
-Repos: `github.com/vladimirbakalov/pr-summary-action`,
-`github.com/vladimirbakalov/secret-scan-action`.
+No API for this — has to be the web UI:
+1. Go to `github.com/vladimirbakalov/pr-summary-action/releases/edit/v1`.
+2. Check **"Publish this Action to the GitHub Marketplace"**.
+3. Accept the Marketplace Developer Agreement (one-time — likely already
+   accepted, since `secret-scan-action` is live).
+4. Fill in category + tagline/description — copy-paste text is pre-written
+   in `docs/marketing/marketplace-listing-cycle31.md` (pricing plan = Free).
+   `LICENSE` and `action.yml` branding are already in place, so that's the
+   only free-text step left.
+
+Repo: `github.com/vladimirbakalov/pr-summary-action`.
 
 ## Small effort, real unlock
 

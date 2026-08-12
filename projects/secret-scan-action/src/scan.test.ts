@@ -574,6 +574,24 @@ describe("scanLine — true positives (known-leaked-secret patterns)", () => {
     expect(findings.some((f) => f.ruleId === "clickhouse-cloud-api-secret-key")).toBe(false);
   });
 
+  it("flags an Adafruit-shaped value when the keyword 'adafruit' is nearby", () => {
+    const value = "aB3fD1x9Qz".repeat(4).slice(0, 32).toLowerCase();
+    const findings = scanLine(line(`const adafruit_key = "${value}";`));
+    expect(findings.some((f) => f.ruleId === "adafruit-api-key" && f.confidence === "generic")).toBe(true);
+  });
+
+  it("does not flag a 32-char value shaped like an Adafruit key without the keyword nearby", () => {
+    const value = "aB3fD1x9Qz".repeat(4).slice(0, 32).toLowerCase();
+    const findings = scanLine(line(`const unrelated_var = "${value}";`));
+    expect(findings.some((f) => f.ruleId === "adafruit-api-key")).toBe(false);
+  });
+
+  it("does not flag an Adafruit-shaped value that is one character short even with the keyword nearby", () => {
+    const value = "aB3fD1x9Qz".repeat(4).slice(0, 31).toLowerCase();
+    const findings = scanLine(line(`const adafruit_key = "${value}";`));
+    expect(findings.some((f) => f.ruleId === "adafruit-api-key")).toBe(false);
+  });
+
   it("flags a generic high-entropy value assigned to a secret-like variable name", () => {
     const findings = scanLine(line(`const apiToken = "zT9pQ2xR7mK4vL8nW1sD6fH3jC0bA5eY";`));
     expect(findings.some((f) => f.ruleId === "generic-high-entropy-secret" && f.confidence === "generic")).toBe(
