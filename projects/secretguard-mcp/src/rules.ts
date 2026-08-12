@@ -365,6 +365,13 @@ export const PATTERN_RULES: PatternRule[] = [
     // use.
     build: () => /\bLTAI[a-zA-Z0-9]{20}\b/g,
   },
+  {
+    id: "artifactory-api-key",
+    description: "Artifactory API key",
+    // AKCp + 69 alphanumeric chars, exact length. Fixed prefix and body
+    // shape, no legitimate non-secret use.
+    build: () => /\bAKCp[A-Za-z0-9]{69}\b/g,
+  },
 ];
 
 /**

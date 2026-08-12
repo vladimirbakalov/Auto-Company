@@ -436,6 +436,18 @@ describe("scanLine — true positives (known-leaked-secret patterns)", () => {
     expect(findings.some((f) => f.ruleId === "alibaba-access-key-id")).toBe(false);
   });
 
+  it("flags an Artifactory API key", () => {
+    const token = `AKCp${"aB1cD2eF3".repeat(8).slice(0, 69)}`;
+    const findings = scanLine(line(`const ARTIFACTORY_KEY = "${token}";`));
+    expect(findings.some((f) => f.ruleId === "artifactory-api-key" && f.confidence === "high")).toBe(true);
+  });
+
+  it("does not flag an Artifactory-API-key-shaped token that is one character short", () => {
+    const token = `AKCp${"aB1cD2eF3".repeat(8).slice(0, 68)}`;
+    const findings = scanLine(line(`const ARTIFACTORY_KEY = "${token}";`));
+    expect(findings.some((f) => f.ruleId === "artifactory-api-key")).toBe(false);
+  });
+
   it("flags a generic high-entropy value assigned to a secret-like variable name", () => {
     const findings = scanLine(line(`const apiToken = "zT9pQ2xR7mK4vL8nW1sD6fH3jC0bA5eY";`));
     expect(findings.some((f) => f.ruleId === "generic-high-entropy-secret" && f.confidence === "generic")).toBe(
