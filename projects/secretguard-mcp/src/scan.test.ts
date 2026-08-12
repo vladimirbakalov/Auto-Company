@@ -410,6 +410,20 @@ describe("scanLine — true positives (known-leaked-secret patterns)", () => {
     expect(findings.some((f) => f.ruleId === "age-secret-key")).toBe(false);
   });
 
+  it("flags a 1Password service account token", () => {
+    const body = "aB1cD2eF3".repeat(28).slice(0, 250);
+    const findings = scanLine(line(`const OP_TOKEN = "ops_eyJ${body}";`));
+    expect(
+      findings.some((f) => f.ruleId === "1password-service-account-token" && f.confidence === "high"),
+    ).toBe(true);
+  });
+
+  it("does not flag a 1Password-service-account-token-shaped token whose body is one character short", () => {
+    const body = "aB1cD2eF3".repeat(28).slice(0, 249);
+    const findings = scanLine(line(`const OP_TOKEN = "ops_eyJ${body}";`));
+    expect(findings.some((f) => f.ruleId === "1password-service-account-token")).toBe(false);
+  });
+
   it("flags a generic high-entropy value assigned to a secret-like variable name", () => {
     const findings = scanLine(line(`const apiToken = "zT9pQ2xR7mK4vL8nW1sD6fH3jC0bA5eY";`));
     expect(findings.some((f) => f.ruleId === "generic-high-entropy-secret" && f.confidence === "generic")).toBe(

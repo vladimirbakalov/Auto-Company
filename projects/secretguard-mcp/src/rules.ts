@@ -349,6 +349,14 @@ export const PATTERN_RULES: PatternRule[] = [
     description: "age encryption secret key",
     build: () => /\bAGE-SECRET-KEY-1[QPZRY9X8GF2TVDW0S3JN54KHCE6MUA7L]{58}\b/g,
   },
+  {
+    id: "1password-service-account-token",
+    description: "1Password service account token",
+    // ops_eyJ + 250+ base64 chars + up to 3 trailing '=' padding chars. No
+    // upper bound on body length upstream; the fixed prefix plus very long
+    // minimum length makes this distinctive enough to stay high confidence.
+    build: () => /\bops_eyJ[a-zA-Z0-9+/]{250,}={0,3}\b/g,
+  },
 ];
 
 /**
