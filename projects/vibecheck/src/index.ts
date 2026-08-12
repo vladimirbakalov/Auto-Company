@@ -20,8 +20,15 @@ import { getCookie, setCookie } from 'hono/cookie';
 import { fetchDefaultBranch, fetchFiles, fetchTree, parseRepoUrl } from './github';
 import { runAllChecks, selectCandidateFiles } from './checks';
 import { computeScore, scoreToGrade } from './scoring';
-import { landingPage } from './pages';
-import type { Env, ScanResult, UserRow, WaitlistEntry } from './types';
+import {
+  landingPage,
+  dashboardPage,
+  dashboardSignInPage,
+  dashboardEmptyStatePage,
+  type DashboardData,
+  type SecurityDriftSummary,
+} from './pages';
+import type { Env, Finding, ScanResult, UserRow, WaitlistEntry } from './types';
 import { ScanError } from './types';
 import { probeUrl, validateProbeTarget } from './probe';
 import { checkRateLimit, rateLimitKey } from './rateLimit';
@@ -32,21 +39,34 @@ import { checkRateLimit, rateLimitKey } from './rateLimit';
 // outside — X-Forwarded-For has no such guarantee and must not be added as
 // a fallback here, or the rate limiter becomes trivially bypassable.
 import { buildLiveFindings } from './liveChecks';
-import { detectTrafficAnomaly, evaluateUptimeTransition } from './anomaly';
+import { CONSECUTIVE_FAILURE_THRESHOLD, detectTrafficAnomaly, evaluateUptimeTransition } from './anomaly';
 import {
   applyCheckResultToMonitor,
   buildCheckInsert,
   fetchDueMonitors,
   fetchTrailingChecks,
+  getMonitorById,
   hasOpenDownAlert,
   insertAlert,
   insertMonitor,
+  listMonitorsForUser,
   recordCheck,
   resolveOpenDownAlert,
   runBoundedFanOut,
+  setMonitorMutedUntil,
   updateMonitorAfterCheck,
+  updateMonitorBaseline,
   DUE_QUEUE_LIMIT,
 } from './monitors';
+import {
+  computeMutedUntil,
+  deriveCostRiskState,
+  diffSecurityFindings,
+  fetchAlertsForMonitor,
+  fetchMostRecentAlertOfType,
+  isMonitorOwnedByUser,
+  isMuted,
+} from './dashboard';
 import {
   findUserByApiKey,
   findUserByStripeCustomerId,
@@ -317,10 +337,11 @@ async function requireAuth(c: Context<{ Bindings: Env }>): Promise<UserRow | nul
 }
 
 // Consumes a magic-link token (emailed after Stripe checkout, ADR §5 step 3),
-// marks it used, and issues a signed httpOnly session cookie. Returns JSON
-// rather than an HTML redirect — the dashboard UI itself is out of scope for
-// this backend-infra change (see docs/product/vibecheck-monitoring-tier-spec.md
-// §5; src/pages.ts is explicitly untouched here).
+// marks it used, and issues a signed httpOnly session cookie, then redirects
+// to GET /dashboard — now that that page exists, there's somewhere real to
+// send the user instead of a bare JSON acknowledgement. Failure paths stay
+// JSON (this is a link a user clicks from email, but a non-2xx JSON body is
+// still the simplest honest response for a browser hitting a dead link).
 app.get('/api/auth/verify', async c => {
   if (!c.env.DB) {
     console.log('TODO: DB binding missing — magic-link verification not available yet');
@@ -339,7 +360,11 @@ app.get('/api/auth/verify', async c => {
 
   if (!c.env.SESSION_SECRET) {
     console.log('TODO: SESSION_SECRET missing — cannot issue a session cookie for user', userId);
-    return c.json({ ok: true, sessionIssued: false });
+    // Still redirect: the magic link itself was valid. GET /dashboard's own
+    // requireAuth will find no session cookie and fall back to
+    // dashboardSignInPage(), which surfaces the gap instead of hiding it
+    // behind a JSON body nobody but a developer would ever see.
+    return c.redirect('/dashboard', 302);
   }
 
   const expiresAtMs = Date.now() + SESSION_TTL_MS;
@@ -351,7 +376,7 @@ app.get('/api/auth/verify', async c => {
     path: '/',
     maxAge: Math.floor(SESSION_TTL_MS / 1000),
   });
-  return c.json({ ok: true, sessionIssued: true });
+  return c.redirect('/dashboard', 302);
 });
 
 // ── Monitors CRUD ─────────────────────────────────────────────────────────────
@@ -419,6 +444,128 @@ app.post('/api/monitors', async c => {
   }
 });
 
+// ── Paid-tier dashboard (spec §5) ────────────────────────────────────────────
+// Feeds both the sparkline (element 1) and the cost-risk sample count
+// (element 2, deriveCostRiskState's cold-start gate) from one D1 call, per
+// dashboard.ts's design note. 50 is comfortably above COLD_START_MIN_SAMPLES
+// (7) so "Learning" vs "Normal"/"Elevated" is decided correctly, and small
+// enough to keep this a cheap read on every dashboard load. There's no
+// day-bucketed check history yet (checks land every 5-15 min per monitor,
+// not once/day) — so "7-day sparkline" is honestly "most recent checks"
+// until a real bucketing scheme exists, which spec §5.1 explicitly allows
+// ("empty/placeholder state acceptable on day one, not blank").
+const DASHBOARD_TRAILING_CHECKS_LIMIT = 50;
+
+app.get('/dashboard', async c => {
+  if (!c.env.DB) {
+    return htmlResponse(dashboardSignInPage());
+  }
+
+  const user = await requireAuth(c);
+  if (!user) {
+    return htmlResponse(dashboardSignInPage());
+  }
+
+  // v1 is one builder, one app (spec §5) — take the first (also most
+  // recently created, per listMonitorsForUser's ORDER BY) monitor rather
+  // than building any multi-project selection UI.
+  const monitors = await listMonitorsForUser(c.env.DB, user.id);
+  const monitor = monitors[0];
+  if (!monitor) {
+    return htmlResponse(dashboardEmptyStatePage());
+  }
+
+  const trailing = await fetchTrailingChecks(c.env.DB, monitor.id, DASHBOARD_TRAILING_CHECKS_LIMIT);
+  const mostRecentLatencyAlert = await fetchMostRecentAlertOfType(c.env.DB, monitor.id, 'latency_anomaly');
+  const costRiskState = deriveCostRiskState(trailing.length, mostRecentLatencyAlert?.fired_at ?? null);
+
+  // Element 3: a null baseline means the checkout-time capture (this file's
+  // Stripe webhook handler) never ran or failed — an honest "no baseline
+  // yet" state, not the same as "diffed clean" — so this short-circuits
+  // before ever probing the live URL.
+  let securityDrift: SecurityDriftSummary;
+  if (monitor.baseline_findings_json === null) {
+    securityDrift = { state: 'no_baseline' };
+  } else {
+    try {
+      const live = await buildLiveFindings(monitor.url);
+      const baseline = JSON.parse(monitor.baseline_findings_json) as Finding[];
+      const diff = diffSecurityFindings(baseline, live);
+      securityDrift =
+        diff.newFindings.length === 0 ? { state: 'no_changes' } : { state: 'new_findings', findings: diff.newFindings };
+    } catch (err) {
+      console.error('Dashboard security-drift check failed for monitor id', monitor.id, err);
+      securityDrift = { state: 'check_failed' };
+    }
+  }
+
+  const alerts = await fetchAlertsForMonitor(c.env.DB, monitor.id);
+
+  // Mirrors evaluateUptimeTransition's own "2 consecutive failures" bar
+  // (anomaly.ts) rather than a raw last_status check, so the dashboard never
+  // shows "Down" for a single blip that wouldn't have fired a 'down' alert
+  // either — one definition of "down" across the whole product.
+  const status: DashboardData['status'] =
+    monitor.last_check_at === null
+      ? 'unknown'
+      : monitor.consecutive_failures >= CONSECUTIVE_FAILURE_THRESHOLD
+        ? 'down'
+        : 'up';
+
+  const data: DashboardData = {
+    monitorId: monitor.id,
+    monitorUrl: monitor.url,
+    status,
+    lastCheckAt: monitor.last_check_at,
+    lastStatus: monitor.last_status,
+    sparkline: trailing.map(check => ({ checkedAt: check.checked_at, latencyMs: check.latency_ms })),
+    costRiskState,
+    securityDrift,
+    alerts,
+    alertEmail: user.email,
+    muted: isMuted(monitor.muted_until),
+    mutedUntil: monitor.muted_until,
+  };
+
+  return htmlResponse(dashboardPage(data));
+});
+
+// First ownership-checked mutation endpoint in this codebase (see
+// isMonitorOwnedByUser's doc comment, dashboard.ts). 404s — not 403 — on
+// both "monitor doesn't exist" and "exists but belongs to someone else" so a
+// caller can't use the response to enumerate other users' monitor ids.
+app.post('/api/monitors/:id/mute', async c => {
+  if (!c.env.DB) {
+    return c.json({ error: 'Monitoring is not available yet.' }, 503);
+  }
+
+  const user = await requireAuth(c);
+  if (!user) {
+    return c.json({ error: 'Authentication required. Use a valid session cookie or API key.' }, 401);
+  }
+
+  const monitorId = Number(c.req.param('id'));
+  if (!Number.isInteger(monitorId)) {
+    return c.json({ error: 'Not found' }, 404);
+  }
+
+  const monitor = await getMonitorById(c.env.DB, monitorId);
+  if (!monitor || !isMonitorOwnedByUser(monitor, user.id)) {
+    return c.json({ error: 'Not found' }, 404);
+  }
+
+  let body: { mute?: boolean };
+  try {
+    body = await c.req.json();
+  } catch {
+    return c.json({ error: 'Expected JSON body with a mute boolean field' }, 400);
+  }
+
+  const mutedUntil = computeMutedUntil(Boolean(body.mute));
+  await setMonitorMutedUntil(c.env.DB, monitorId, mutedUntil);
+  return c.json({ muted: isMuted(mutedUntil), mutedUntil });
+});
+
 // ── Billing: Stripe Checkout + webhook (ADR §5) ──────────────────────────────
 app.post('/api/checkout', async c => {
   if (!c.env.STRIPE_SECRET_KEY || !c.env.STRIPE_WEBHOOK_SECRET || !c.env.STRIPE_PRICE_ID) {
@@ -426,7 +573,7 @@ app.post('/api/checkout', async c => {
     return c.json({ error: 'Checkout is not available yet.' }, 503);
   }
 
-  let body: { email?: string; successUrl?: string; cancelUrl?: string };
+  let body: { email?: string; url?: string; successUrl?: string; cancelUrl?: string };
   try {
     body = await c.req.json();
   } catch {
@@ -436,6 +583,17 @@ app.post('/api/checkout', async c => {
   const successUrl = body.successUrl ?? new URL('/checkout/success', c.req.url).toString();
   const cancelUrl = body.cancelUrl ?? new URL('/', c.req.url).toString();
 
+  // Funnel-gap fix (docs/product/vibecheck-monitoring-tier-spec.md §3.4):
+  // carry the URL the user just proved live in the inline probe demo
+  // through Checkout as metadata, so the webhook (below) has something to
+  // create a monitor from. Deliberately NOT re-validated with
+  // validateProbeTarget here — this is just an opaque string handed to
+  // Stripe as metadata, never fetched by this endpoint; the untrusted-input
+  // boundary that matters is on the other side of the round-trip, where the
+  // webhook handler treats it as untrusted and re-validates before ever
+  // probing it.
+  const deployedUrl = (body.url ?? '').trim();
+
   const gateway = createStripeGateway(c.env.STRIPE_SECRET_KEY, c.env.STRIPE_WEBHOOK_SECRET);
   try {
     const session = await gateway.createCheckoutSession({
@@ -443,6 +601,7 @@ app.post('/api/checkout', async c => {
       customerEmail: body.email,
       successUrl,
       cancelUrl,
+      metadata: deployedUrl ? { deployed_url: deployedUrl } : undefined,
     });
     return c.json({ id: session.id, url: session.url });
   } catch (err) {
@@ -507,6 +666,68 @@ app.post('/api/stripe/webhook', async c => {
           // sendEmail already logged why (missing key vs. provider error);
           // this line adds the correlation id an ops triage actually needs.
           console.error('Magic-link email not delivered for user id', user.id);
+        }
+
+        // Funnel-gap fix (spec §3.4): this is the ONLY place in the codebase
+        // that ever creates a monitor from a real paying user — without it,
+        // a subscriber pays $20/mo and the dashboard stays empty forever
+        // (see this change's task brief for how that gap was found). The
+        // URL round-tripped through Stripe as metadata, so it's untrusted
+        // input exactly like POST /api/monitors' body.url and gets the same
+        // validateProbeTarget SSRF guard, not a shortcut past it.
+        //
+        // Stripe delivers webhooks at-least-once and this branch's own probe
+        // calls can legitimately take long enough to trigger a Stripe-side
+        // retry (qa-bach review, cycle 11) — without this existence check, a
+        // retry would insertMonitor a second time with no unique constraint
+        // to stop it, leaving an un-mutable ghost monitor polling forever
+        // that the dashboard (monitors[0], newest-first) never shows again.
+        // v1 is one user/one app (spec §5), so "does this user have any
+        // monitor yet" is the right idempotency key, not one keyed on the URL.
+        const existingMonitors = await listMonitorsForUser(c.env.DB, user.id);
+        if (existingMonitors.length > 0) {
+          console.log(
+            'Checkout monitor creation skipped: user id',
+            user.id,
+            'already has a monitor (likely a Stripe webhook retry).'
+          );
+        } else if (action.deployedUrl) {
+          const validated = validateProbeTarget(action.deployedUrl);
+          if (!validated.ok) {
+            console.error(
+              'Checkout monitor creation skipped: deployedUrl failed validation for user id',
+              user.id,
+              validated.reason
+            );
+          } else {
+            try {
+              const monitor = await insertMonitor(c.env.DB, { userId: user.id, url: validated.url });
+
+              // Security-drift baseline (dashboard element 3, spec §5.3):
+              // captured once here so the dashboard has something to diff
+              // against later. buildLiveFindings throws if the root probe
+              // fails — a real possibility seconds after checkout if the
+              // deployment changed — so this is wrapped and left null on
+              // failure rather than failing the whole webhook. A null
+              // baseline is the dashboard's honest "no baseline yet" state,
+              // not an error.
+              try {
+                const baselineFindings: Finding[] = await buildLiveFindings(validated.url);
+                await updateMonitorBaseline(c.env.DB, monitor.id, JSON.stringify(baselineFindings));
+              } catch (err) {
+                console.error(
+                  'Security-drift baseline capture failed for monitor id',
+                  monitor.id,
+                  '— leaving baseline_findings_json null (dashboard will show "no baseline yet"):',
+                  err
+                );
+              }
+            } catch (err) {
+              console.error('Failed to create monitor from checkout for user id', user.id, err);
+            }
+          }
+        } else {
+          console.log('Checkout completed with no deployedUrl in metadata for user id', user.id, '— no monitor created.');
         }
         break;
       }

@@ -22,6 +22,8 @@ function monitor(overrides: Partial<MonitorRow> = {}): MonitorRow {
     consecutive_failures: 0,
     paused: 0,
     created_at: '2026-08-01T00:00:00.000Z',
+    baseline_findings_json: null,
+    muted_until: null,
     ...overrides,
   };
 }

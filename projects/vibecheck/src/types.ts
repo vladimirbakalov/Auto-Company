@@ -152,6 +152,12 @@ export interface MonitorRow {
   consecutive_failures: number;
   paused: 0 | 1;
   created_at: string;
+  // Added by migrations/0002_dashboard.sql — dashboard element 3 (security
+  // drift) and element 5 (mute toggle). Both nullable, no backfill: NULL is
+  // already the correct "no baseline yet" / "not muted" state for existing
+  // rows (see that migration's header comment).
+  baseline_findings_json: string | null;
+  muted_until: string | null;
 }
 
 export interface CheckRow {

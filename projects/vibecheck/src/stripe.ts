@@ -34,6 +34,14 @@ export interface CreateCheckoutSessionParams {
   customerEmail?: string;
   successUrl: string;
   cancelUrl: string;
+  // Round-tripped through Stripe (Checkout Session -> webhook's
+  // checkout.session.completed) so the funnel gap flagged in
+  // docs/product/vibecheck-monitoring-tier-spec.md §3.4 can be closed: the
+  // "instant live-ping demo" step verifies a URL is live *before* checkout,
+  // but without carrying that URL through Checkout itself, nothing ever
+  // creates the monitor the user just paid for. Stripe's metadata map is
+  // plain string->string, form-encoded as metadata[key]=value below.
+  metadata?: Record<string, string> | null;
 }
 
 export interface CheckoutSession {
@@ -108,6 +116,11 @@ export function createStripeGateway(secretKey: string, webhookSecret: string): S
         cancel_url: params.cancelUrl,
       });
       if (params.customerEmail) body.set('customer_email', params.customerEmail);
+      if (params.metadata) {
+        for (const [key, value] of Object.entries(params.metadata)) {
+          body.set(`metadata[${key}]`, value);
+        }
+      }
 
       const res = await fetch(`${STRIPE_API}/checkout/sessions`, {
         method: 'POST',
@@ -223,6 +236,12 @@ export interface StripeCheckoutSessionCompletedEvent {
       customer_email: string | null;
       customer_details?: { email: string | null } | null;
       subscription: string | null;
+      // Round-tripped from CreateCheckoutSessionParams.metadata above.
+      // Optional so older/hand-constructed payloads (and every existing test
+      // fixture predating this field) still type-check and route correctly —
+      // routeStripeEvent below must treat a missing/absent metadata map the
+      // same as one with no deployed_url key.
+      metadata?: Record<string, string> | null;
     };
   };
 }
@@ -253,7 +272,17 @@ export type StripeWebhookEvent =
   | { type: string; data: { object: Record<string, unknown> } };
 
 export type RoutedStripeAction =
-  | { kind: 'upsert_user_from_checkout'; email: string; stripeCustomerId: string; stripeSubscriptionId: string | null }
+  | {
+      kind: 'upsert_user_from_checkout';
+      email: string;
+      stripeCustomerId: string;
+      stripeSubscriptionId: string | null;
+      // The URL verified live in the pre-checkout probe demo (spec §3.4),
+      // carried through Stripe as Checkout Session metadata. null when
+      // absent — either an older payload shape or a checkout started
+      // without the probe step (e.g. a direct Stripe link).
+      deployedUrl: string | null;
+    }
   | { kind: 'update_subscription_status'; stripeCustomerId: string; status: 'active' | 'past_due' | 'canceled' }
   | { kind: 'ignored'; eventType: string };
 
@@ -280,6 +309,7 @@ export function routeStripeEvent(event: StripeWebhookEvent): RoutedStripeAction 
         email,
         stripeCustomerId: session.customer,
         stripeSubscriptionId: session.subscription,
+        deployedUrl: session.metadata?.deployed_url ?? null,
       };
     }
     case 'customer.subscription.updated':

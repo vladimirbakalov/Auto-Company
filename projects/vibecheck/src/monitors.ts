@@ -156,6 +156,35 @@ export async function listMonitorsForUser(db: D1Database, userId: number): Promi
   return results ?? [];
 }
 
+// Single-row lookup by primary key — used by GET /dashboard (session-auth,
+// looks up the caller's own monitor via listMonitorsForUser instead) and by
+// POST /api/monitors/:id/mute, which needs the row *before* it can check
+// ownership (isMonitorOwnedByUser, dashboard.ts) — you can't verify a
+// monitor belongs to the caller without first fetching it by id.
+export async function getMonitorById(db: D1Database, monitorId: number): Promise<MonitorRow | null> {
+  const row = await db.prepare('SELECT * FROM monitors WHERE id = ?1').bind(monitorId).first<MonitorRow>();
+  return row ?? null;
+}
+
+// Stores the security-drift baseline captured once, right after signup
+// (POST /api/stripe/webhook's upsert_user_from_checkout handling, index.ts)
+// — a JSON-serialized Finding[] from buildLiveFindings. Left unset (column
+// stays NULL) if that initial capture fails; dashboard element 3 treats NULL
+// as "no baseline yet", not an error (see dashboard.ts).
+export async function updateMonitorBaseline(db: D1Database, monitorId: number, baselineFindingsJson: string): Promise<void> {
+  await db
+    .prepare('UPDATE monitors SET baseline_findings_json = ?1 WHERE id = ?2')
+    .bind(baselineFindingsJson, monitorId)
+    .run();
+}
+
+// Sets/clears the "pause alerts for 24h" mute (dashboard element 5). Pass an
+// ISO timestamp to mute until, or null to un-mute immediately — see
+// computeMutedUntil (dashboard.ts) for the pure logic that decides which.
+export async function setMonitorMutedUntil(db: D1Database, monitorId: number, mutedUntil: string | null): Promise<void> {
+  await db.prepare('UPDATE monitors SET muted_until = ?1 WHERE id = ?2').bind(mutedUntil, monitorId).run();
+}
+
 export async function recordCheck(db: D1Database, check: CheckInsert): Promise<CheckRow> {
   const row = await db
     .prepare(

@@ -16,7 +16,7 @@ import {
   PROBE_CHECK_RATE_LIMIT,
   MONITORS_RATE_LIMIT,
 } from '../src/index';
-import type { Env, ScanResult, UserRow, MonitorRow } from '../src/types';
+import type { Env, ScanResult, UserRow, MonitorRow, AlertRow, CheckRow } from '../src/types';
 
 function fakeScheduledEvent(cron: string): ScheduledEvent {
   return { cron, scheduledTime: Date.now(), type: 'scheduled', noRetry: () => {} } as unknown as ScheduledEvent;
@@ -454,6 +454,8 @@ describe('POST /api/monitors — rate limiting', () => {
     consecutive_failures: 0,
     paused: 0,
     created_at: '2026-08-12T00:00:00.000Z',
+    baseline_findings_json: null,
+    muted_until: null,
   };
 
   const monitorsRequest = (env: Env, ip: string) =>
@@ -648,16 +650,45 @@ describe('POST /api/stripe/webhook — email wiring', () => {
   // Fake D1: branches on the SQL text, same shortcut as fakeMonitorsDb above
   // — these tests only need deterministic email-wiring behavior, not real
   // persistence semantics.
-  function fakeWebhookDb(user: UserRow | null): D1Database {
+  function fakeWebhookDb(
+    user: UserRow | null,
+    opts: { existingMonitors?: MonitorRow[]; onInsertMonitor?: () => void; onUpdateBaseline?: () => void } = {}
+  ): D1Database {
+    const existingMonitors = opts.existingMonitors ?? [];
     return {
       prepare: (sql: string) => ({
         bind: () => ({
           first: async <T>() => {
             if (sql.includes('INSERT INTO users')) return user as unknown as T;
             if (sql.includes('SELECT * FROM users WHERE stripe_customer_id')) return user as unknown as T;
+            if (sql.includes('INSERT INTO monitors')) {
+              opts.onInsertMonitor?.();
+              return {
+                id: 501,
+                user_id: user?.id ?? 0,
+                url: 'https://deployed.example.com',
+                interval_seconds: 300,
+                last_status: null,
+                last_checked_at: null,
+                consecutive_failures: 0,
+                paused: 0,
+                created_at: '2026-08-12T00:00:00.000Z',
+                baseline_findings_json: null,
+                muted_until: null,
+              } as unknown as T;
+            }
             return null as unknown as T;
           },
-          run: async () => ({ success: true }) as unknown as D1Result,
+          run: async () => {
+            if (sql.includes('UPDATE monitors SET baseline_findings_json')) opts.onUpdateBaseline?.();
+            return { success: true } as unknown as D1Result;
+          },
+          all: async <T>() => {
+            if (sql.includes('SELECT * FROM monitors WHERE user_id')) {
+              return { results: existingMonitors as unknown as T[] } as unknown as D1Result<T>;
+            }
+            return { results: [] } as unknown as D1Result<T>;
+          },
         }),
       }),
     } as unknown as D1Database;
@@ -786,6 +817,98 @@ describe('POST /api/stripe/webhook — email wiring', () => {
     const body = (await res.json()) as { ok: boolean };
     expect(body.ok).toBe(true);
   });
+
+  // Funnel-gap fix coverage (spec §3.4) — this branch had zero HTTP-level
+  // tests before (qa-bach review, cycle 11): only routeStripeEvent's pure
+  // metadata-parsing was covered, not the handler that actually calls
+  // insertMonitor/buildLiveFindings.
+  describe('checkout monitor creation (funnel-gap fix, spec §3.4)', () => {
+    const checkoutCompletedEventWithUrl = {
+      ...checkoutCompletedEvent,
+      data: {
+        object: { ...checkoutCompletedEvent.data.object, metadata: { deployed_url: 'https://deployed.example.com' } },
+      },
+    };
+
+    function mockResendAndProbe(): typeof fetch {
+      return vi.fn(async (input: RequestInit | string | URL) => {
+        const url = String(input);
+        if (url === 'https://api.resend.com/emails') {
+          return new Response(JSON.stringify({ id: 'email_x' }), { status: 200 });
+        }
+        if (url === 'https://deployed.example.com/') {
+          return streamedResponse('<html></html>', {
+            status: 200,
+            headers: new Headers({
+              'strict-transport-security': 'max-age=1',
+              'x-frame-options': 'DENY',
+              'x-content-type-options': 'nosniff',
+            }),
+          });
+        }
+        return streamedResponse('not found', { status: 404 });
+      }) as unknown as typeof fetch;
+    }
+
+    it('creates a monitor and captures a security-drift baseline when the user has no existing monitor', async () => {
+      const onInsertMonitor = vi.fn();
+      const onUpdateBaseline = vi.fn();
+      global.fetch = mockResendAndProbe();
+
+      const env = {
+        STRIPE_SECRET_KEY: 'sk_test_fake',
+        STRIPE_WEBHOOK_SECRET: webhookSecret,
+        DB: fakeWebhookDb(testUser, { existingMonitors: [], onInsertMonitor, onUpdateBaseline }),
+        RESEND_API_KEY: 're_test_fake',
+      } as Env;
+
+      const res = await postWebhook(env, checkoutCompletedEventWithUrl);
+      expect(res.status).toBe(200);
+      expect(onInsertMonitor).toHaveBeenCalledTimes(1);
+      expect(onUpdateBaseline).toHaveBeenCalledTimes(1);
+    });
+
+    // The bug this guards against: Stripe redeliveries (at-least-once) hitting
+    // this same webhook again — without this check, insertMonitor would run
+    // a second time with no unique constraint, leaving an un-mutable ghost
+    // monitor the dashboard never shows (monitors[0], newest-first) but that
+    // keeps polling and alerting forever.
+    it('skips monitor creation when the user already has a monitor (idempotent under Stripe webhook retries)', async () => {
+      const onInsertMonitor = vi.fn();
+      global.fetch = mockResendAndProbe();
+      const logSpy = vi.spyOn(console, 'log').mockImplementation(() => {});
+
+      const existingMonitor: MonitorRow = {
+        id: 500,
+        user_id: testUser.id,
+        url: 'https://deployed.example.com',
+        interval_seconds: 300,
+        last_status: 200,
+        last_checked_at: '2026-08-12T00:00:00.000Z',
+        consecutive_failures: 0,
+        paused: 0,
+        created_at: '2026-08-01T00:00:00.000Z',
+        baseline_findings_json: '[]',
+        muted_until: null,
+      };
+
+      const env = {
+        STRIPE_SECRET_KEY: 'sk_test_fake',
+        STRIPE_WEBHOOK_SECRET: webhookSecret,
+        DB: fakeWebhookDb(testUser, { existingMonitors: [existingMonitor], onInsertMonitor }),
+        RESEND_API_KEY: 're_test_fake',
+      } as Env;
+
+      const res = await postWebhook(env, checkoutCompletedEventWithUrl);
+      expect(res.status).toBe(200);
+      expect(onInsertMonitor).not.toHaveBeenCalled();
+      expect(logSpy).toHaveBeenCalledWith(
+        'Checkout monitor creation skipped: user id',
+        testUser.id,
+        'already has a monitor (likely a Stripe webhook retry).'
+      );
+    });
+  });
 });
 
 describe('scheduled — monitor cron (MONITOR_CHECK_CRON) down/recovered alert emails', () => {
@@ -807,6 +930,8 @@ describe('scheduled — monitor cron (MONITOR_CHECK_CRON) down/recovered alert e
     consecutive_failures: 1,
     paused: 0,
     created_at: '2026-08-01T00:00:00.000Z',
+    baseline_findings_json: null,
+    muted_until: null,
   };
 
   // Fake D1 covering every query the fan-out worker touches for one due
@@ -937,5 +1062,309 @@ describe('scheduled — monitor cron (MONITOR_CHECK_CRON) down/recovered alert e
     await expect(
       scheduled(fakeScheduledEvent(MONITOR_CHECK_CRON), env, fakeExecutionContext())
     ).resolves.toBeUndefined();
+  });
+});
+
+// GET /dashboard + POST /api/monitors/:id/mute (spec §5). Fake D1 branches on
+// SQL text, same shortcut used by fakeMonitorsDb/fakeWebhookDb/fakeCronDb
+// above — these are route-wiring tests, not a real-persistence integration
+// suite. Auth goes through requireAuth's Authorization: Bearer path (not the
+// signed session cookie) purely for test simplicity — both paths funnel into
+// the exact same requireAuth() call in index.ts, so this exercises the same
+// downstream route logic either way; session-cookie-specific behavior is
+// already covered by test/auth.test.ts.
+describe('GET /dashboard', () => {
+  const dashboardUser: UserRow = {
+    id: 1,
+    email: 'owner@example.com',
+    stripe_customer_id: 'cus_1',
+    stripe_subscription_id: 'sub_1',
+    subscription_status: 'active',
+    api_key_hash: 'irrelevant-fake-does-not-check-hash',
+    created_at: '2026-08-01T00:00:00.000Z',
+  };
+
+  const dashboardMonitor: MonitorRow = {
+    id: 5,
+    user_id: 1,
+    url: 'https://myapp.example.com',
+    interval_seconds: 300,
+    next_check_at: '2026-08-12T00:10:00.000Z',
+    last_check_at: '2026-08-12T00:05:00.000Z',
+    last_status: 200,
+    consecutive_failures: 0,
+    paused: 0,
+    created_at: '2026-08-01T00:00:00.000Z',
+    // null baseline deliberately: exercises the "no baseline yet" branch
+    // without needing to also mock the live-probe fetch call for this
+    // route-wiring test (that diff logic has its own coverage in
+    // test/dashboard.test.ts).
+    baseline_findings_json: null,
+    muted_until: null,
+  };
+
+  function fakeDashboardDb(opts: { user: UserRow; monitor: MonitorRow | null; alerts: AlertRow[] }): D1Database {
+    return {
+      prepare: (sql: string) => ({
+        bind: () => ({
+          first: async <T>() => {
+            if (sql.includes('FROM users WHERE api_key_hash')) return opts.user as unknown as T;
+            return null as unknown as T;
+          },
+          all: async <T>() => {
+            if (sql.startsWith('SELECT * FROM monitors WHERE user_id')) {
+              return { results: opts.monitor ? [opts.monitor] : [] } as unknown as { results: T[] };
+            }
+            if (sql.startsWith('SELECT * FROM checks')) {
+              return { results: [] as CheckRow[] } as unknown as { results: T[] };
+            }
+            if (sql.startsWith('SELECT * FROM alerts')) {
+              return { results: opts.alerts } as unknown as { results: T[] };
+            }
+            return { results: [] } as unknown as { results: T[] };
+          },
+        }),
+      }),
+    } as unknown as D1Database;
+  }
+
+  it('renders the dashboard for an authenticated user with a monitor', async () => {
+    const env = {
+      DB: fakeDashboardDb({ user: dashboardUser, monitor: dashboardMonitor, alerts: [] }),
+    } as Env;
+
+    const res = await app.request(
+      '/dashboard',
+      { headers: { Authorization: 'Bearer fake-api-key' } },
+      env
+    );
+
+    expect(res.status).toBe(200);
+    expect(res.headers.get('Content-Type')).toContain('text/html');
+    const html = await res.text();
+    expect(html).toContain('https://myapp.example.com');
+    expect(html).toContain('owner@example.com');
+    // Fewer than COLD_START_MIN_SAMPLES trailing checks (zero here) -> Learning.
+    expect(html).toContain('Learning');
+    expect(html).toContain('No baseline captured yet');
+    expect(html).toContain("No alerts yet");
+    expect(html).toContain('Pause alerts for 24h');
+  });
+
+  it('renders the sign-in state when unauthenticated', async () => {
+    const env = {
+      DB: fakeDashboardDb({ user: dashboardUser, monitor: dashboardMonitor, alerts: [] }),
+    } as Env;
+
+    const res = await app.request('/dashboard', {}, env);
+
+    expect(res.status).toBe(200);
+    const html = await res.text();
+    expect(html).toContain("This link isn't valid");
+  });
+
+  it('renders an empty state for an authenticated user with no monitor yet', async () => {
+    const env = {
+      DB: fakeDashboardDb({ user: dashboardUser, monitor: null, alerts: [] }),
+    } as Env;
+
+    const res = await app.request(
+      '/dashboard',
+      { headers: { Authorization: 'Bearer fake-api-key' } },
+      env
+    );
+
+    expect(res.status).toBe(200);
+    const html = await res.text();
+    expect(html).toContain('No monitor yet');
+  });
+
+  // Route-level coverage for the security-drift live-probe branch (qa-bach
+  // review, cycle 11: this branch was previously only exercised indirectly
+  // through diffSecurityFindings's own unit tests in dashboard.test.ts, never
+  // through the actual GET /dashboard handler's try/catch around
+  // buildLiveFindings).
+  describe('security drift — live-probe branch (non-null baseline)', () => {
+    const monitorWithBaseline: MonitorRow = {
+      ...dashboardMonitor,
+      baseline_findings_json: JSON.stringify([
+        { id: 'live-cors-1', title: 'Permissive CORS policy on live deployment (wildcard origin)', severity: 'medium', confidence: 'high', explanation: 'x' },
+      ]),
+    };
+
+    const originalFetch = global.fetch;
+    afterEach(() => {
+      vi.restoreAllMocks();
+      global.fetch = originalFetch;
+    });
+
+    it('degrades gracefully (200, "check failed" message) when the live probe throws', async () => {
+      global.fetch = vi.fn(async () => {
+        throw new Error('network unreachable');
+      }) as unknown as typeof fetch;
+
+      const env = {
+        DB: fakeDashboardDb({ user: dashboardUser, monitor: monitorWithBaseline, alerts: [] }),
+      } as Env;
+
+      const res = await app.request('/dashboard', { headers: { Authorization: 'Bearer fake-api-key' } }, env);
+
+      expect(res.status).toBe(200);
+      const html = await res.text();
+      expect(html).toContain("Can't check security drift right now");
+    });
+
+    it('reports no new findings when the live probe matches the stored baseline', async () => {
+      global.fetch = vi.fn(async (input: RequestInit | string | URL) => {
+        const url = String(input);
+        if (url === 'https://myapp.example.com/') {
+          // Include the hardening headers so only the CORS-wildcard finding
+          // fires — matching monitorWithBaseline's single stored finding
+          // exactly, otherwise checkLiveMissingSecurityHeaders would also
+          // fire and this "no changes" test would see a spurious new finding.
+          return streamedResponse('<html></html>', {
+            status: 200,
+            headers: new Headers({
+              'access-control-allow-origin': '*',
+              'strict-transport-security': 'max-age=1',
+              'x-frame-options': 'DENY',
+              'x-content-type-options': 'nosniff',
+            }),
+          });
+        }
+        return streamedResponse('not found', { status: 404 });
+      }) as unknown as typeof fetch;
+
+      const env = {
+        DB: fakeDashboardDb({ user: dashboardUser, monitor: monitorWithBaseline, alerts: [] }),
+      } as Env;
+
+      const res = await app.request('/dashboard', { headers: { Authorization: 'Bearer fake-api-key' } }, env);
+
+      expect(res.status).toBe(200);
+      const html = await res.text();
+      expect(html).toContain('No changes since your last scan');
+    });
+  });
+});
+
+describe('POST /api/monitors/:id/mute', () => {
+  const owner: UserRow = {
+    id: 1,
+    email: 'owner@example.com',
+    stripe_customer_id: null,
+    stripe_subscription_id: null,
+    subscription_status: 'active',
+    api_key_hash: 'irrelevant',
+    created_at: '2026-08-01T00:00:00.000Z',
+  };
+
+  const otherUser: UserRow = {
+    id: 2,
+    email: 'other@example.com',
+    stripe_customer_id: null,
+    stripe_subscription_id: null,
+    subscription_status: 'active',
+    api_key_hash: 'irrelevant',
+    created_at: '2026-08-01T00:00:00.000Z',
+  };
+
+  const ownedMonitor: MonitorRow = {
+    id: 9,
+    user_id: 1, // belongs to `owner`, not `otherUser`
+    url: 'https://myapp.example.com',
+    interval_seconds: 300,
+    next_check_at: '2026-08-12T00:10:00.000Z',
+    last_check_at: null,
+    last_status: null,
+    consecutive_failures: 0,
+    paused: 0,
+    created_at: '2026-08-01T00:00:00.000Z',
+    baseline_findings_json: null,
+    muted_until: null,
+  };
+
+  // `authedAs` is whoever requireAuth's fake api-key lookup resolves to for
+  // this request — independent of which monitor row getMonitorById returns —
+  // so ownership-mismatch scenarios (a different user's credential hitting
+  // someone else's monitor id) are just a matter of passing a different user.
+  function fakeMuteDb(opts: { authedAs: UserRow; monitor: MonitorRow | null }): D1Database {
+    return {
+      prepare: (sql: string) => ({
+        bind: () => ({
+          first: async <T>() => {
+            if (sql.includes('FROM users WHERE api_key_hash')) return opts.authedAs as unknown as T;
+            if (sql.startsWith('SELECT * FROM monitors WHERE id')) return opts.monitor as unknown as T;
+            return null as unknown as T;
+          },
+          run: async () => ({ success: true }) as unknown as D1Result,
+        }),
+      }),
+    } as unknown as D1Database;
+  }
+
+  const muteRequest = (env: Env, monitorId: number, mute: boolean) =>
+    app.request(
+      `/api/monitors/${monitorId}/mute`,
+      {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', Authorization: 'Bearer fake-api-key' },
+        body: JSON.stringify({ mute }),
+      },
+      env
+    );
+
+  it('mutes the caller\'s own monitor and returns the new state', async () => {
+    const env = { DB: fakeMuteDb({ authedAs: owner, monitor: ownedMonitor }) } as Env;
+
+    const res = await muteRequest(env, 9, true);
+
+    expect(res.status).toBe(200);
+    const body = (await res.json()) as { muted: boolean; mutedUntil: string | null };
+    expect(body.muted).toBe(true);
+    expect(body.mutedUntil).not.toBeNull();
+  });
+
+  it('un-mutes when mute:false is sent', async () => {
+    const env = { DB: fakeMuteDb({ authedAs: owner, monitor: { ...ownedMonitor, muted_until: '2026-08-13T00:00:00.000Z' } }) } as Env;
+
+    const res = await muteRequest(env, 9, false);
+
+    expect(res.status).toBe(200);
+    const body = (await res.json()) as { muted: boolean; mutedUntil: string | null };
+    expect(body.muted).toBe(false);
+    expect(body.mutedUntil).toBeNull();
+  });
+
+  it('returns 404 (not the monitor state) when a different user tries to mute someone else\'s monitor', async () => {
+    const env = { DB: fakeMuteDb({ authedAs: otherUser, monitor: ownedMonitor }) } as Env;
+
+    const res = await muteRequest(env, 9, true);
+
+    expect(res.status).toBe(404);
+  });
+
+  it('returns 404 when the monitor id does not exist', async () => {
+    const env = { DB: fakeMuteDb({ authedAs: owner, monitor: null }) } as Env;
+
+    const res = await muteRequest(env, 999, true);
+
+    expect(res.status).toBe(404);
+  });
+
+  it('returns 401 when unauthenticated', async () => {
+    const env = { DB: fakeMuteDb({ authedAs: owner, monitor: ownedMonitor }) } as Env;
+
+    const res = await app.request(
+      '/api/monitors/9/mute',
+      {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ mute: true }),
+      },
+      env
+    );
+
+    expect(res.status).toBe(401);
   });
 });

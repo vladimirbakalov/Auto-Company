@@ -1,6 +1,9 @@
 // vibecheck — single-page frontend (plain HTML/CSS/JS, no framework).
 // Served directly from the Worker. Calls POST /api/scan and renders the result.
 
+import type { AlertRow, AlertType, Finding } from './types';
+import type { CostRiskState } from './dashboard';
+
 export function landingPage(): string {
   return `<!doctype html>
 <html lang="en">
@@ -487,4 +490,329 @@ export function landingPage(): string {
 </script>
 </body>
 </html>`;
+}
+
+// ── Paid-tier dashboard (spec §5) ────────────────────────────────────────────
+// GET /dashboard (index.ts). Deliberately a second, separate <html> document
+// rather than a client-side route bolted onto landingPage() — the two pages
+// have almost no shared interactivity (this one is server-rendered per
+// request from D1 state, not a static shell that fetches JSON), so sharing
+// one <script> block would mean more branching for no real reuse. What *is*
+// shared, on purpose (product continuity, per this change's brief): the
+// :root CSS variable palette below is copied verbatim from landingPage(),
+// and the finding-list classes (.finding/.sev-*/etc.) are reused as-is for
+// element 3's "new findings" list so a finding looks identical whether it's
+// shown on the free scan or here.
+
+function escapeHtml(s: unknown): string {
+  return String(s).replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[c] as string);
+}
+
+function formatTimestamp(iso: string): string {
+  return new Date(iso).toLocaleString('en-US', { timeZone: 'UTC', dateStyle: 'medium', timeStyle: 'short' }) + ' UTC';
+}
+
+// Shared <head>/<style>/wrapper for all three dashboard-family pages
+// (sign-in, empty-state, real dashboard) so the CSS variable block and page
+// chrome live in exactly one place.
+function dashboardShell(title: string, bodyHtml: string): string {
+  return `<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>${escapeHtml(title)} — vibecheck</title>
+<style>
+  :root {
+    --bg: #0b0d12;
+    --panel: #12151c;
+    --panel-border: #232734;
+    --text: #e7e9ee;
+    --muted: #8a91a3;
+    --accent: #6ee7b7;
+    --accent-dim: #34d399;
+    --critical: #f87171;
+    --high: #fb923c;
+    --medium: #fbbf24;
+    --low: #93c5fd;
+    --radius: 10px;
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Inter, Roboto, sans-serif;
+  }
+  * { box-sizing: border-box; }
+  body { margin: 0; background: var(--bg); color: var(--text); line-height: 1.5; }
+  .wrap { max-width: 640px; margin: 0 auto; padding: 48px 20px 80px; }
+  .brand { display: inline-flex; align-items: center; gap: 8px; font-weight: 700; font-size: 15px; color: var(--muted); letter-spacing: 0.04em; text-transform: uppercase; }
+  .brand-dot { width: 8px; height: 8px; border-radius: 50%; background: var(--accent); box-shadow: 0 0 8px var(--accent); }
+  .brand-dot.status-down { background: var(--critical); box-shadow: 0 0 8px var(--critical); }
+  .brand-dot.status-unknown { background: var(--muted); box-shadow: none; }
+  h1 { font-size: 26px; margin: 16px 0 8px; letter-spacing: -0.01em; }
+  h2 { font-size: 16px; margin: 0 0 12px; }
+  .sub { color: var(--muted); font-size: 15px; margin: 0 0 32px; word-break: break-all; }
+
+  .card {
+    background: var(--panel);
+    border: 1px solid var(--panel-border);
+    border-radius: var(--radius);
+    padding: 22px;
+    margin-bottom: 16px;
+  }
+  .muted-text { color: var(--muted); font-size: 13px; }
+
+  .status-pill { display: inline-block; font-size: 12px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.04em; padding: 3px 10px; border-radius: 999px; margin-right: 10px; }
+  .status-pill.status-up { background: rgba(110,231,183,0.15); color: var(--accent); }
+  .status-pill.status-down { background: rgba(248,113,113,0.15); color: var(--critical); }
+  .status-pill.status-unknown { background: rgba(138,145,163,0.15); color: var(--muted); }
+  .health-row { display: flex; align-items: center; margin-bottom: 14px; }
+  .sparkline { display: block; margin-top: 4px; }
+
+  .risk-badge { display: inline-block; font-size: 13px; font-weight: 700; padding: 4px 12px; border-radius: 999px; margin-bottom: 10px; }
+  .risk-badge.risk-normal { background: rgba(110,231,183,0.15); color: var(--accent); }
+  .risk-badge.risk-learning { background: rgba(138,145,163,0.15); color: var(--muted); }
+  .risk-badge.risk-elevated { background: rgba(251,146,60,0.15); color: var(--high); }
+
+  .finding { border-top: 1px solid var(--panel-border); padding: 12px 0; }
+  .finding:first-child { border-top: none; padding-top: 0; }
+  .finding-head { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+  .sev { font-size: 11px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.04em; padding: 2px 8px; border-radius: 999px; }
+  .sev-critical { background: rgba(248,113,113,0.15); color: var(--critical); }
+  .sev-high { background: rgba(251,146,60,0.15); color: var(--high); }
+  .sev-medium { background: rgba(251,191,36,0.15); color: var(--medium); }
+  .sev-low { background: rgba(147,197,253,0.15); color: var(--low); }
+  .finding-title { font-weight: 600; margin: 6px 0 2px; font-size: 14px; }
+
+  .alert-row { border-top: 1px solid var(--panel-border); padding: 10px 0; display: flex; justify-content: space-between; gap: 12px; font-size: 14px; }
+  .alert-row:first-child { border-top: none; padding-top: 0; }
+  .alert-type { font-weight: 600; }
+  .alert-meta { color: var(--muted); font-size: 12px; text-align: right; }
+
+  button { background: var(--accent); color: #06281c; border: none; border-radius: 8px; padding: 11px 18px; font-size: 14px; font-weight: 600; cursor: pointer; }
+  button:hover { background: var(--accent-dim); }
+  button:disabled { opacity: 0.6; cursor: default; }
+
+  a { color: var(--accent-dim); }
+</style>
+</head>
+<body>
+  <div class="wrap">
+${bodyHtml}
+  </div>
+</body>
+</html>`;
+}
+
+// Shown by GET /dashboard when requireAuth finds no valid session/API key.
+// Spec §5 explicitly rules out multi-project/team flows for v1, and building
+// a new "resend my magic link" form is its own scoped feature this change
+// doesn't own — so this is deliberately just an explanation, not a recovery
+// flow.
+export function dashboardSignInPage(): string {
+  return dashboardShell(
+    'Sign in',
+    `    <div class="brand"><span class="brand-dot status-unknown"></span> vibecheck</div>
+    <h1>This link isn't valid</h1>
+    <div class="card">
+      <p style="margin:0;">This link isn't valid or has expired — check your email for the link we sent after checkout.</p>
+    </div>`
+  );
+}
+
+// Shown when an authenticated user has no monitor yet (e.g. checkout
+// succeeded but the funnel-gap monitor creation — see index.ts's Stripe
+// webhook handler — didn't have a deployedUrl to work with). Kept to one
+// line rather than a second onboarding flow: v1 is one builder, one app,
+// created at checkout time, not from the dashboard itself.
+export function dashboardEmptyStatePage(): string {
+  return dashboardShell(
+    'Dashboard',
+    `    <div class="brand"><span class="brand-dot status-unknown"></span> vibecheck</div>
+    <h1>No monitor yet</h1>
+    <div class="card">
+      <p style="margin:0 0 12px;">We don't have a live URL on file for your account yet, so there's nothing to monitor.</p>
+      <p style="margin:0;"><a href="/">Run a free scan →</a> and use "Start monitoring" once you've verified your live URL.</p>
+    </div>`
+  );
+}
+
+export interface DashboardSparklinePoint {
+  checkedAt: string;
+  latencyMs: number | null;
+}
+
+// Discriminated on `state` rather than a boolean + nullable fields — the
+// three "nothing to diff" reasons (no baseline captured, live probe failed
+// right now, diffed clean) are meaningfully different messages to a user,
+// not the same empty state with different footnotes.
+export type SecurityDriftSummary =
+  | { state: 'no_baseline' }
+  | { state: 'check_failed' }
+  | { state: 'no_changes' }
+  | { state: 'new_findings'; findings: Finding[] };
+
+export interface DashboardData {
+  monitorId: number;
+  monitorUrl: string;
+  // 'unknown' covers "never checked yet" (last_check_at is null) as its own
+  // state rather than defaulting to 'up' or 'down' — neither is true yet.
+  status: 'up' | 'down' | 'unknown';
+  lastCheckAt: string | null;
+  lastStatus: number | null;
+  sparkline: DashboardSparklinePoint[];
+  costRiskState: CostRiskState;
+  securityDrift: SecurityDriftSummary;
+  alerts: AlertRow[];
+  alertEmail: string;
+  muted: boolean;
+  mutedUntil: string | null;
+}
+
+const ALERT_TYPE_LABELS: Record<AlertType, string> = {
+  down: 'Went down',
+  recovered: 'Back up',
+  latency_anomaly: 'Unusual traffic',
+};
+
+// Only 'down' alerts ever get resolved_at set (dashboard.ts's module header
+// explains why — 'recovered'/'latency_anomaly' rows are themselves the
+// resolution event for a prior 'down' row, not something that resolves on
+// its own), so this is the only alert type with a meaningful ongoing/
+// resolved distinction to show.
+function alertResolutionText(alert: AlertRow): string {
+  if (alert.type !== 'down') return '';
+  return alert.resolved_at ? `Resolved ${formatTimestamp(alert.resolved_at)}` : 'Ongoing';
+}
+
+const COST_RISK_COPY: Record<CostRiskState, string> = {
+  Normal: 'Nothing unusual right now.',
+  Learning: "Still learning your app's normal traffic — alerts may be more sensitive for the first week.",
+  Elevated:
+    'Traffic on your app looks unusual in the last 24 hours. This is a pattern, not a bill reading — worth a quick check of your usage dashboard.',
+};
+
+// Empty/placeholder state is acceptable on day one (spec §5.1) but must not
+// be blank — fewer than 2 points can't draw a line, so show why instead of
+// an empty box.
+function renderSparkline(points: DashboardSparklinePoint[]): string {
+  const values = points.map(p => p.latencyMs).filter((v): v is number => v !== null);
+  if (values.length < 2) {
+    return `<p class="muted-text">Still gathering response-time data — check back soon.</p>`;
+  }
+  const width = 280;
+  const height = 40;
+  const max = Math.max(...values);
+  const min = Math.min(...values);
+  const range = max - min || 1;
+  const step = width / (values.length - 1);
+  const coords = values.map((v, i) => `${(i * step).toFixed(1)},${(height - ((v - min) / range) * height).toFixed(1)}`);
+  return `<svg class="sparkline" viewBox="0 0 ${width} ${height}" width="100%" height="${height}" preserveAspectRatio="none"><polyline points="${coords.join(' ')}" fill="none" stroke="var(--accent-dim)" stroke-width="2" stroke-linejoin="round" stroke-linecap="round" /></svg>`;
+}
+
+function renderSecurityDrift(drift: SecurityDriftSummary): string {
+  switch (drift.state) {
+    case 'no_baseline':
+      return `<p class="muted-text" style="margin:0;">No baseline captured yet — we'll compare against your next check.</p>`;
+    case 'check_failed':
+      return `<p class="muted-text" style="margin:0;">Can't check security drift right now — we'll try again on the next check.</p>`;
+    case 'no_changes':
+      return `<p style="margin:0;">No changes since your last scan.</p>`;
+    case 'new_findings': {
+      const count = drift.findings.length;
+      const rows = drift.findings
+        .map(
+          f => `      <div class="finding">
+        <div class="finding-head"><span class="sev sev-${f.severity}">${escapeHtml(f.severity)}</span></div>
+        <div class="finding-title">${escapeHtml(f.title)}</div>
+      </div>`
+        )
+        .join('\n');
+      return `<p style="margin:0 0 8px;">${count} new finding${count === 1 ? '' : 's'} since monitoring started:</p>\n${rows}`;
+    }
+  }
+}
+
+function renderAlerts(alerts: AlertRow[]): string {
+  if (alerts.length === 0) {
+    return `<p class="muted-text" style="margin:0;">No alerts yet — that's good news.</p>`;
+  }
+  return alerts
+    .map(
+      a => `    <div class="alert-row">
+      <span class="alert-type">${escapeHtml(ALERT_TYPE_LABELS[a.type])}</span>
+      <span class="alert-meta">${formatTimestamp(a.fired_at)}${alertResolutionText(a) ? ' · ' + alertResolutionText(a) : ''}</span>
+    </div>`
+    )
+    .join('\n');
+}
+
+export function dashboardPage(data: DashboardData): string {
+  const lastCheckedText = data.lastCheckAt ? formatTimestamp(data.lastCheckAt) : 'Not checked yet';
+  const statusLabel = data.status === 'up' ? 'Up' : data.status === 'down' ? 'Down' : 'Unknown';
+
+  const body = `    <div class="brand"><span class="brand-dot status-${data.status}"></span> vibecheck</div>
+    <h1>Dashboard</h1>
+    <p class="sub">${escapeHtml(data.monitorUrl)}</p>
+
+    <div class="card">
+      <h2>Live Site Health</h2>
+      <div class="health-row">
+        <span class="status-pill status-${data.status}">${statusLabel}</span>
+        <span class="muted-text">Last checked ${lastCheckedText}${data.lastStatus !== null ? ` &middot; HTTP ${data.lastStatus}` : ''}</span>
+      </div>
+      ${renderSparkline(data.sparkline)}
+    </div>
+
+    <div class="card">
+      <h2>Cost Risk</h2>
+      <span class="risk-badge risk-${data.costRiskState.toLowerCase()}">${data.costRiskState}</span>
+      <p class="muted-text" style="margin:0;">${COST_RISK_COPY[data.costRiskState]}</p>
+    </div>
+
+    <div class="card">
+      <h2>Security Drift</h2>
+      ${renderSecurityDrift(data.securityDrift)}
+    </div>
+
+    <div class="card">
+      <h2>Alerts</h2>
+${renderAlerts(data.alerts)}
+    </div>
+
+    <div class="card">
+      <h2>Settings</h2>
+      <p style="margin:0 0 14px;">Alerts go to <strong>${escapeHtml(data.alertEmail)}</strong></p>
+      <button id="mute-toggle" data-monitor-id="${data.monitorId}" data-muted="${data.muted}">${data.muted ? 'Resume alerts' : 'Pause alerts for 24h'}</button>
+      <p id="mute-status" class="muted-text" style="margin:10px 0 0;">${data.muted && data.mutedUntil ? `Alerts paused until ${formatTimestamp(data.mutedUntil)}` : 'Alerts are active.'}</p>
+    </div>
+
+<script>
+(function () {
+  var btn = document.getElementById('mute-toggle');
+  if (!btn) return;
+  var statusEl = document.getElementById('mute-status');
+
+  btn.addEventListener('click', async function () {
+    var monitorId = btn.getAttribute('data-monitor-id');
+    var currentlyMuted = btn.getAttribute('data-muted') === 'true';
+    btn.disabled = true;
+
+    try {
+      var res = await fetch('/api/monitors/' + monitorId + '/mute', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ mute: !currentlyMuted }),
+      });
+      var data = await res.json();
+      if (!res.ok) throw new Error(data.error || 'Could not update mute setting.');
+      btn.setAttribute('data-muted', String(data.muted));
+      btn.textContent = data.muted ? 'Resume alerts' : 'Pause alerts for 24h';
+      statusEl.textContent = data.muted ? 'Alerts paused until ' + data.mutedUntil : 'Alerts are active.';
+    } catch (err) {
+      statusEl.textContent = err.message || 'Something went wrong. Please try again.';
+    } finally {
+      btn.disabled = false;
+    }
+  });
+})();
+</script>`;
+
+  return dashboardShell('Dashboard', body);
 }

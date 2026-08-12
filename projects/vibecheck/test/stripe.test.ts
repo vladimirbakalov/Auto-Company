@@ -208,7 +208,58 @@ describe('routeStripeEvent', () => {
       email: 'founder@example.com',
       stripeCustomerId: 'cus_ABC123',
       stripeSubscriptionId: 'sub_XYZ789',
+      deployedUrl: null,
     });
+  });
+
+  // Funnel-gap fix (docs/product/vibecheck-monitoring-tier-spec.md §3.4):
+  // the pre-checkout live-ping demo's URL is carried through Stripe as
+  // Checkout Session metadata so the webhook can create the monitor the
+  // user just paid for. See POST /api/checkout (index.ts) for where
+  // metadata[deployed_url] is set.
+  it('extracts deployedUrl from session metadata when present', () => {
+    const event: StripeWebhookEvent = {
+      type: 'checkout.session.completed',
+      data: {
+        object: {
+          customer: 'cus_ABC123',
+          customer_email: 'founder@example.com',
+          customer_details: { email: 'founder@example.com' },
+          subscription: 'sub_XYZ789',
+          metadata: { deployed_url: 'https://myapp.vercel.app' },
+        },
+      },
+    } as unknown as StripeWebhookEvent;
+
+    const action = routeStripeEvent(event);
+    expect(action).toEqual({
+      kind: 'upsert_user_from_checkout',
+      email: 'founder@example.com',
+      stripeCustomerId: 'cus_ABC123',
+      stripeSubscriptionId: 'sub_XYZ789',
+      deployedUrl: 'https://myapp.vercel.app',
+    });
+  });
+
+  // Backward compatibility: webhook payloads from before this field existed
+  // (or any checkout started without the probe-demo step) have no metadata
+  // key at all — must route cleanly to deployedUrl: null, not throw or
+  // produce undefined.
+  it('returns deployedUrl: null when metadata is absent entirely (pre-existing payload shape)', () => {
+    const event: StripeWebhookEvent = {
+      type: 'checkout.session.completed',
+      data: {
+        object: {
+          customer: 'cus_ABC123',
+          customer_email: 'founder@example.com',
+          customer_details: { email: 'founder@example.com' },
+          subscription: 'sub_XYZ789',
+        },
+      },
+    } as unknown as StripeWebhookEvent;
+
+    const action = routeStripeEvent(event);
+    expect(action).toMatchObject({ kind: 'upsert_user_from_checkout', deployedUrl: null });
   });
 
   it('falls back to customer_details.email when customer_email is null', () => {
