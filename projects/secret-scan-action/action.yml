@@ -1,0 +1,71 @@
+name: "Secret Scan Action"
+description: >-
+  Scans a pull request's changed lines for leaked secrets (AWS/Stripe/GitHub/
+  Google/Slack keys, private key blocks, JWTs, and generic high-entropy
+  credentials) and fails the check on confirmed hits. Works with zero
+  configuration; optionally add your own Anthropic API key to have Claude
+  triage ambiguous generic-entropy matches and cut false positives.
+author: "Auto Company"
+branding:
+  icon: "shield"
+  color: "red"
+
+inputs:
+  github-token:
+    description: >-
+      Token used to read the PR diff, optionally read `.secretscanignore`
+      from the repo, and post the findings comment. The default GITHUB_TOKEN
+      provided by Actions is sufficient — just make sure the workflow grants
+      it `pull-requests: write`.
+    required: false
+    default: ${{ github.token }}
+  anthropic-api-key:
+    description: >-
+      Optional. Your own Anthropic API key (create a repo secret, e.g.
+      ANTHROPIC_API_KEY, and pass it here). When set, ambiguous generic
+      high-entropy matches are triaged by Claude before posting to cut false
+      positives. Confirmed-pattern matches (AWS keys, Stripe keys, etc.) are
+      never sent to the model — they don't need triage. Never sent anywhere
+      but api.anthropic.com. Scanning works fully without this input.
+    required: false
+    default: ""
+  model:
+    description: "Anthropic model ID to use for optional ambiguous-match triage."
+    required: false
+    default: "claude-opus-4-8"
+  allowlist:
+    description: >-
+      Optional newline-separated list of regex patterns. A finding is
+      suppressed if any pattern matches the secret value, the full changed
+      line, or the file path. Merged with `.secretscanignore` if present.
+    required: false
+    default: ""
+  allowlist-path:
+    description: >-
+      Path to a repo file listing allowlist regex patterns, one per line
+      (`#` starts a comment). Read via the GitHub API at the PR's BASE commit
+      (not its head) — no checkout step required. Reading from base means a
+      PR cannot suppress its own newly-added secret by adding a matching
+      allowlist entry in that same PR; an entry only takes effect once
+      merged.
+    required: false
+    default: ".secretscanignore"
+  fail-on:
+    description: >-
+      Which confidence tier fails the check: "high" (confirmed-pattern
+      matches only — recommended) or "any" (also fail on unresolved generic
+      high-entropy matches).
+    required: false
+    default: "high"
+
+outputs:
+  findings-count:
+    description: "Total number of findings posted to the PR comment (after allowlist filtering)."
+  high-confidence-count:
+    description: "Number of high-confidence (confirmed-pattern) findings."
+  comment-id:
+    description: "The ID of the PR comment that was created or updated."
+
+runs:
+  using: "node20"
+  main: "dist/index.js"

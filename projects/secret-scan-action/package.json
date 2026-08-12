@@ -1,0 +1,26 @@
+{
+  "name": "secret-scan-action",
+  "version": "0.1.0",
+  "description": "A free GitHub Action that scans PR diffs for leaked secrets (AWS/Stripe/GitHub/Google/Slack keys, private keys, JWTs, and generic high-entropy credentials) and fails the check on confirmed hits. Optional BYOK Claude triage cuts noise on ambiguous matches.",
+  "private": true,
+  "license": "MIT",
+  "type": "commonjs",
+  "scripts": {
+    "typecheck": "tsc --noEmit",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "build": "ncc build src/index.ts -o dist --source-map --license licenses.txt",
+    "package": "npm run build"
+  },
+  "dependencies": {
+    "@actions/core": "^2.0.3",
+    "@actions/github": "^8.0.1",
+    "@anthropic-ai/sdk": "^0.116.0"
+  },
+  "devDependencies": {
+    "@types/node": "^20.19.41",
+    "@vercel/ncc": "^0.44.1",
+    "typescript": "^5.7.3",
+    "vitest": "^4.1.10"
+  }
+}

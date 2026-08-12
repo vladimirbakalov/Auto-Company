@@ -152,6 +152,10 @@ projects/*
 # (Actions runs dist/index.js directly; there's no install/build step on checkout).
 !projects/pr-summary-action/dist/
 !projects/pr-summary-action/dist/**
+!projects/secret-scan-action/
+# secret-scan-action is also a JS GitHub Action — same dist/ exception as above.
+!projects/secret-scan-action/dist/
+!projects/secret-scan-action/dist/**
 
 # Local/private outputs (do not publish)
 AGENTS.md

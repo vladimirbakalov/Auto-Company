@@ -1,0 +1,172 @@
+# Secret Scan Action
+
+A free GitHub Action that scans a pull request's **changed lines only** for
+leaked secrets — AWS keys, Stripe keys, GitHub tokens, Google API keys, Slack
+tokens, private key blocks, JWTs, and generic high-entropy credentials — and
+fails the check when it finds a confirmed one. It works out of the box with
+zero configuration and no API key. Optionally, bring your own Anthropic API
+key to have Claude triage the small set of ambiguous matches and cut noise.
+
+## Why "changed lines only"
+
+This action reads the PR's diff, not the repo's current state. Only lines a
+PR is *adding* are scanned — pre-existing secrets sitting in unchanged
+context lines, or ones being *removed*, are never flagged. That keeps this
+useful on day one in an existing repo: it won't dredge up every secret
+already committed to history, it just stops new ones from landing.
+
+## What it does
+
+On every `pull_request` event:
+
+1. Fetches the PR's changed files and parses each unified diff, extracting
+   only added lines with their line numbers in the new file.
+2. Runs a curated ruleset against those lines:
+   - **Pattern rules (high confidence)** — distinctive formats that are
+     near-certain secrets when matched: AWS access key IDs (`AKIA...`) and
+     contextual secret keys, Stripe live keys (`sk_live_`, `rk_live_`),
+     GitHub tokens (`ghp_`, `gho_`, `github_pat_`, ...), Google API keys
+     (`AIza...`), Slack tokens (`xox[baprs]-...`), private key blocks
+     (`-----BEGIN ... PRIVATE KEY-----`), and JWTs.
+   - **Generic entropy rule** — a value assigned to a variable named like
+     `secret`, `token`, `password`/`credential`, or a `*key` compound
+     commonly used for real secret material (`apiKey`, `sessionKey`,
+     `signingKey`, `encryptionKey`, `clientKey`, `jwtKey`, `webhookKey`, ...)
+     whose value also has high Shannon entropy (looks random, not like a
+     placeholder or an env-var reference). Deliberately does *not* match a
+     bare `*Key` — that would also catch `partitionKey`, `cacheKey`,
+     `queryKey`, and similar non-secret identifiers that are common in
+     ordinary code. This is the only tier that's genuinely ambiguous — even
+     with the name gate, hashes, UUIDs, and test fixtures can trip it.
+3. **Optional BYOK triage**: if you set `anthropic-api-key`, the generic-tier
+   matches (and *only* those — pattern matches don't need a second opinion)
+   are sent to Claude, masked, for a real/false-positive judgment. Only the
+   value's length, entropy, variable name, and a masked context line are
+   sent — never the raw secret. If the call fails for any reason, every
+   generic match is reported unfiltered rather than silently dropped
+   (fail-safe, not fail-open).
+4. Posts (or updates) a single PR comment listing every finding — file, line,
+   rule, and a redacted snippet — signed with a one-line attribution at the
+   bottom.
+5. **Fails the check** if any high-confidence (pattern-matched) finding
+   exists. Generic-tier matches are shown but don't fail the check by
+   default — set `fail-on: any` if you want them to.
+
+## Setup
+
+Add the workflow — no repo secret required for the basic scan:
+
+```yaml
+name: Secret Scan
+
+on:
+  pull_request:
+    types: [opened, synchronize]
+
+permissions:
+  pull-requests: write # needed to post/update the findings comment
+  contents: read        # needed to read the diff and (optionally) .secretscanignore
+
+concurrency:
+  group: secret-scan-${{ github.event.pull_request.number }}
+  cancel-in-progress: true
+
+jobs:
+  scan:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: vladimirbakalov/Auto-Company/projects/secret-scan-action@main
+        with:
+          # anthropic-api-key: ${{ secrets.ANTHROPIC_API_KEY }}  # optional — enables AI triage of ambiguous matches
+          # fail-on: "high"        # optional, this is the default ("any" also blocks on generic matches)
+          # allowlist-path: ".secretscanignore"  # optional, this is the default
+```
+
+That's it. Open (or push to) a pull request and the action comments within a
+minute or two — no Anthropic key, no other account, no signup.
+
+> This action currently lives inside a larger monorepo, so it's referenced
+> as `owner/repo/path-to-action@ref`, same as this company's other actions.
+> Pin `@main` to a commit SHA for reproducible builds.
+
+The `concurrency` block prevents duplicate comments when you push multiple
+commits to a PR in quick succession.
+
+### Suppressing false positives
+
+Add a `.secretscanignore` file to the repo root (or point `allowlist-path` at
+a different file), one regex pattern per line, `#` for comments:
+
+```
+# ignore this specific test fixture value
+AKIAIOSFODNN7EXAMPLE
+
+# ignore anything under the fixtures directory
+^test/fixtures/
+```
+
+A finding is suppressed if any pattern matches the secret value, the full
+changed line, or the file path. You can also pass patterns inline via the
+`allowlist` input (newline-separated) without committing a file.
+
+Keep patterns as narrow as you can — a broad path prefix (e.g. `^test/`)
+suppresses *every* finding under that path, including a real secret an
+attacker deliberately drops there later. Prefer exact values or tightly
+scoped filenames over broad prefixes where possible.
+
+## Inputs
+
+| Input | Required | Default | Description |
+|---|---|---|---|
+| `github-token` | no | `${{ github.token }}` | Token used to read the diff, optionally read `.secretscanignore`, and post the comment. |
+| `anthropic-api-key` | no | *(none)* | Your own Anthropic API key. Enables Claude triage of ambiguous generic-entropy matches. Scanning works fully without it. |
+| `model` | no | `claude-opus-4-8` | Anthropic model ID used for optional triage. |
+| `allowlist` | no | *(none)* | Newline-separated regex patterns to suppress known false positives. |
+| `allowlist-path` | no | `.secretscanignore` | Path to a repo file of allowlist patterns, read via the GitHub Contents API at the PR's **base** commit (no checkout needed). |
+| `fail-on` | no | `high` | `high` fails only on confirmed-pattern matches; `any` also fails on unresolved generic-entropy matches. |
+
+## Outputs
+
+| Output | Description |
+|---|---|
+| `findings-count` | Total findings posted to the comment, after allowlist filtering. |
+| `high-confidence-count` | Number of high-confidence (confirmed-pattern) findings. |
+| `comment-id` | The ID of the PR comment that was created or updated. |
+
+## Security notes
+
+- The optional Anthropic API key is never logged, never echoed into the PR
+  comment, and the SDK's `baseURL` is pinned explicitly to
+  `https://api.anthropic.com` so a compromised or misconfigured prior
+  workflow step can't redirect it via `ANTHROPIC_BASE_URL`.
+- Only masked/redacted values ever leave the runner for AI triage — never
+  the raw secret.
+- The PR comment itself never contains an unredacted secret value, even for
+  findings it lists.
+- `.secretscanignore` is read from the PR's **base** commit, not its head. A
+  PR can't suppress a secret it just introduced by adding a matching
+  allowlist entry in that same PR — the entry only takes effect once merged.
+
+## Development
+
+```bash
+npm install
+npm run typecheck   # tsc --noEmit
+npm test            # vitest run — all network calls are mocked
+npm run build       # bundles src/ into dist/index.js via @vercel/ncc
+```
+
+`dist/index.js` is committed to this repo (standard practice for JavaScript
+GitHub Actions) — run `npm run build` and commit the result after any change
+to `src/`.
+
+## Scope (v1)
+
+This is a stateless Action that runs inside your own CI job. No dashboard,
+no persistent secret-history database, no webhook server, no npm publish, no
+new cloud account. It reads the PR diff and (optionally) one allowlist file,
+and writes one PR comment. That's it.
+
+## License
+
+MIT.
