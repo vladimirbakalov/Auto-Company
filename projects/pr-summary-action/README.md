@@ -1,0 +1,133 @@
+# BYOK AI PR Summary
+
+A free, open-source GitHub Action that posts an AI-generated summary — what
+changed, why, and what to watch out for — as a comment on every pull
+request. It updates that same comment on every push instead of spamming a
+new one.
+
+## Why BYOK (bring your own key)
+
+This action doesn't have a backend. There is no server it calls, no
+database it writes to, no account to sign up for, and no license key to
+buy. **Your code and your Anthropic API key go straight from your own
+GitHub Actions runner to `api.anthropic.com` and nowhere else.**
+
+Concretely:
+
+- The diff comes from `GITHUB_TOKEN`, which GitHub already injects into
+  every workflow run — you don't create or manage a separate credential
+  for that.
+- The Anthropic API key is a **repo secret you own**. It's never sent to
+  us (there is no "us" in the request path), never logged, and never
+  proxied through any third-party service.
+- You pay Anthropic directly for the tokens you use, at Anthropic's
+  prices. There's no markup, because there's nothing in between.
+
+If you're comfortable adding a Claude API key to your repo's secrets, this
+action costs nothing to run beyond your own Anthropic usage.
+
+## What it does
+
+On every `pull_request` event (`opened` or `synchronize`):
+
+1. Reads the changed files and diff via the GitHub API.
+2. Sends a bounded, intelligently-truncated version of that diff to Claude.
+3. Posts (or updates) a single PR comment with:
+   - **What changed** — a short bullet summary
+   - **Why** — the apparent intent, inferred from the diff and PR description
+   - **Risk areas** — anything a reviewer should look closely at
+
+Large diffs are truncated rather than rejected: the full list of changed
+files is always kept, small diffs are shown in full, and the character
+budget for large diffs is spent starting with the smallest ones first —
+so a one-line config change doesn't get crowded out by a regenerated
+lockfile.
+
+## Setup
+
+### 1. Add your Anthropic API key as a repo secret
+
+Repo → **Settings → Secrets and variables → Actions → New repository
+secret**. Name it `ANTHROPIC_API_KEY`, value is your key from
+[console.anthropic.com](https://console.anthropic.com).
+
+### 2. Add the workflow
+
+Create `.github/workflows/pr-summary.yml`:
+
+```yaml
+name: PR Summary
+
+on:
+  pull_request:
+    types: [opened, synchronize]
+
+permissions:
+  pull-requests: write # needed to post/update the summary comment
+  contents: read # needed to read the diff
+
+jobs:
+  summarize:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: auto-company/pr-summary-action@v1
+        with:
+          anthropic-api-key: ${{ secrets.ANTHROPIC_API_KEY }}
+          # github-token defaults to the automatic GITHUB_TOKEN — no need to set it
+          # model: claude-opus-4-8   # optional, this is the default
+          # max-diff-chars: "60000" # optional, this is the default
+```
+
+That's it. Open (or push to) a pull request and the action will comment
+within a minute or two.
+
+> Only grant `pull-requests: write` and `contents: read` — this action
+> never needs more than that, and the example above intentionally doesn't
+> ask for more.
+
+## Inputs
+
+| Input | Required | Default | Description |
+|---|---|---|---|
+| `anthropic-api-key` | yes | — | Your own Anthropic API key. |
+| `github-token` | no | `${{ github.token }}` | Token used to read the diff and post the comment. The default `GITHUB_TOKEN` is sufficient. |
+| `model` | no | `claude-opus-4-8` | Any current Anthropic model ID. |
+| `max-diff-chars` | no | `60000` | Character budget for the diff sent to the model. Larger diffs are truncated, not rejected. |
+
+## Outputs
+
+| Output | Description |
+|---|---|
+| `summary` | The generated summary text. |
+| `comment-id` | The ID of the PR comment that was created or updated. |
+
+## Graceful failure modes
+
+- **No API key configured** — the action posts a one-time helpful comment
+  explaining how to add the secret, logs a warning, and exits
+  successfully. It does not fail your workflow.
+- **Diff too large** — truncated intelligently (see above), never sent
+  unbounded and never crashes the step.
+- **Anthropic API error** (auth failure, rate limit, etc.) — the step
+  fails with a clear, generic message (e.g. "Anthropic API authentication
+  failed (401)"). The raw API error and your key are never included in
+  logs or error messages.
+
+## Development
+
+```bash
+npm install
+npm run typecheck   # tsc --noEmit
+npm test            # vitest run — all network calls are mocked
+npm run build       # bundles src/ into dist/index.js via @vercel/ncc
+```
+
+`dist/index.js` is committed to this repo (standard practice for
+JavaScript GitHub Actions, since Actions doesn't run an install step for
+you) — run `npm run build` and commit the result after any change to
+`src/`.
+
+## License
+
+MIT. This is a small, honestly free side project — no paid tier, no
+telemetry, no license key, nothing held back.

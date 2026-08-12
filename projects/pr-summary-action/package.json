@@ -1,0 +1,26 @@
+{
+  "name": "pr-summary-action",
+  "version": "0.1.0",
+  "description": "BYOK AI PR Summary — a free GitHub Action that summarizes pull requests using your own Anthropic API key. Your code and your key never leave your own CI runner.",
+  "private": true,
+  "license": "MIT",
+  "type": "commonjs",
+  "scripts": {
+    "typecheck": "tsc --noEmit",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "build": "ncc build src/index.ts -o dist --source-map --license licenses.txt",
+    "package": "npm run build"
+  },
+  "dependencies": {
+    "@actions/core": "^2.0.3",
+    "@actions/github": "^8.0.1",
+    "@anthropic-ai/sdk": "^0.116.0"
+  },
+  "devDependencies": {
+    "@types/node": "^20.19.41",
+    "@vercel/ncc": "^0.44.1",
+    "typescript": "^5.7.3",
+    "vitest": "^4.1.10"
+  }
+}

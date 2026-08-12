@@ -1,0 +1,45 @@
+name: "BYOK AI PR Summary"
+description: >-
+  Posts an AI-generated summary of a pull request's diff as a PR comment,
+  using your own Anthropic API key. Nothing is sent to any third-party
+  server other than Anthropic's API — your code and your key stay on your
+  own GitHub Actions runner.
+author: "Auto Company"
+branding:
+  icon: "message-square"
+  color: "purple"
+
+inputs:
+  anthropic-api-key:
+    description: >-
+      Your own Anthropic API key (create a repo secret, e.g. ANTHROPIC_API_KEY,
+      and pass it here). Never sent anywhere but api.anthropic.com.
+    required: true
+  github-token:
+    description: >-
+      Token used to read the PR diff and post the summary comment. The
+      default GITHUB_TOKEN provided by Actions is sufficient — just make
+      sure the workflow grants it `pull-requests: write`.
+    required: false
+    default: ${{ github.token }}
+  model:
+    description: "Anthropic model ID to use for generating the summary."
+    required: false
+    default: "claude-opus-4-8"
+  max-diff-chars:
+    description: >-
+      Maximum number of diff characters to send to the model. Larger diffs
+      are intelligently truncated (file list preserved, largest hunks cut
+      first) rather than sent unbounded or rejected outright.
+    required: false
+    default: "60000"
+
+outputs:
+  summary:
+    description: "The generated PR summary text."
+  comment-id:
+    description: "The ID of the PR comment that was created or updated."
+
+runs:
+  using: "node20"
+  main: "dist/index.js"

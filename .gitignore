@@ -147,6 +147,11 @@ projects/*
 !projects/.gitkeep
 !projects/snapog/
 !projects/vibecheck/
+!projects/pr-summary-action/
+# pr-summary-action is a JS GitHub Action — dist/ is its committed build output
+# (Actions runs dist/index.js directly; there's no install/build step on checkout).
+!projects/pr-summary-action/dist/
+!projects/pr-summary-action/dist/**
 
 # Local/private outputs (do not publish)
 AGENTS.md
