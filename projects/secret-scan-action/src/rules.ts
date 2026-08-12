@@ -245,6 +245,13 @@ export const PATTERN_RULES: PatternRule[] = [
     // exact length, no legitimate non-secret use of this shape.
     build: () => /\bCLOJARS_[a-z0-9]{60}\b/gi,
   },
+  {
+    id: "pulumi-api-token",
+    description: "Pulumi API token",
+    // pul- + 40 lowercase-hex chars, fixed prefix and exact length, no
+    // legitimate non-secret use of this shape.
+    build: () => /\bpul-[a-f0-9]{40}\b/g,
+  },
 ];
 
 /**

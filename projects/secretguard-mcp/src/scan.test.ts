@@ -224,6 +224,24 @@ describe("scanLine — true positives (known-leaked-secret patterns)", () => {
     expect(findings.some((f) => f.ruleId === "clojars-api-token" && f.confidence === "high")).toBe(true);
   });
 
+  it("does not flag a Clojars-shaped token whose body is one character short", () => {
+    const token = `CLOJARS_${"a1b2c3d4e5".repeat(6).slice(0, -1)}`; // 59 alphanumeric
+    const findings = scanLine(line(`const CLOJARS_TOKEN = "${token}";`));
+    expect(findings.some((f) => f.ruleId === "clojars-api-token")).toBe(false);
+  });
+
+  it("flags a Pulumi API token", () => {
+    const token = `pul-${"a1b2c3d4e5".repeat(4)}`; // 40 hex chars
+    const findings = scanLine(line(`const PULUMI_ACCESS_TOKEN = "${token}";`));
+    expect(findings.some((f) => f.ruleId === "pulumi-api-token" && f.confidence === "high")).toBe(true);
+  });
+
+  it("does not flag a Pulumi-shaped token whose body is one character short", () => {
+    const token = `pul-${"a1b2c3d4e5".repeat(4).slice(0, -1)}`; // 39 hex chars
+    const findings = scanLine(line(`const PULUMI_ACCESS_TOKEN = "${token}";`));
+    expect(findings.some((f) => f.ruleId === "pulumi-api-token")).toBe(false);
+  });
+
   it("flags a generic high-entropy value assigned to a secret-like variable name", () => {
     const findings = scanLine(line(`const apiToken = "zT9pQ2xR7mK4vL8nW1sD6fH3jC0bA5eY";`));
     expect(findings.some((f) => f.ruleId === "generic-high-entropy-secret" && f.confidence === "generic")).toBe(
