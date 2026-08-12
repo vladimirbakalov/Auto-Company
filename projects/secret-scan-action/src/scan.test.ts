@@ -536,6 +536,28 @@ describe("scanLine — true positives (known-leaked-secret patterns)", () => {
     expect(findings.some((f) => f.ruleId === "airtable-personnal-access-token")).toBe(false);
   });
 
+  it("flags an Authress Service Client Access Key", () => {
+    const seg1 = "aB3fD1x9Qz".repeat(3).slice(0, 20);
+    const seg2 = "aB3f".repeat(2).slice(0, 5);
+    const seg3 = "aB3fD1x9Qz-".repeat(3).slice(0, 20);
+    const seg4 = "aB3fD1x9Qz".repeat(4).slice(0, 30);
+    const token = `authress_${seg1}.${seg2}.acc_${seg3}.${seg4}`;
+    const findings = scanLine(line(`const AUTHRESS_KEY = "${token}";`));
+    expect(
+      findings.some((f) => f.ruleId === "authress-service-client-access-key" && f.confidence === "high"),
+    ).toBe(true);
+  });
+
+  it("does not flag an Authress-Service-Client-Access-Key-shaped value that is one character short", () => {
+    const seg1 = "aB3fD1x9Qz".repeat(3).slice(0, 20);
+    const seg2 = "aB3f".repeat(2).slice(0, 5);
+    const seg3 = "aB3fD1x9Qz-".repeat(3).slice(0, 20);
+    const seg4 = "aB3fD1x9Qz".repeat(4).slice(0, 29);
+    const token = `authress_${seg1}.${seg2}.acc_${seg3}.${seg4}`;
+    const findings = scanLine(line(`const AUTHRESS_KEY = "${token}";`));
+    expect(findings.some((f) => f.ruleId === "authress-service-client-access-key")).toBe(false);
+  });
+
   it("flags a generic high-entropy value assigned to a secret-like variable name", () => {
     const findings = scanLine(line(`const apiToken = "zT9pQ2xR7mK4vL8nW1sD6fH3jC0bA5eY";`));
     expect(findings.some((f) => f.ruleId === "generic-high-entropy-secret" && f.confidence === "generic")).toBe(

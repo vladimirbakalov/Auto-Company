@@ -33252,6 +33252,17 @@ exports.PATTERN_RULES = [
         // 64-hex suffix is distinctive enough to keep this high confidence.
         build: () => /\bpat[A-Za-z0-9]{14}\.[a-f0-9]{64}\b/g,
     },
+    {
+        id: "authress-service-client-access-key",
+        description: "Authress Service Client Access Key",
+        // One of four branded prefixes (sc_/ext_/scauth_/authress_) + a dotted
+        // 4-segment body: two alnum segments, a literal "acc" (case-sensitive,
+        // even though the rest of the body is case-insensitive upstream)
+        // followed by a separator and alnum-dash chars, then a long base64ish
+        // segment. The branded prefixes plus the fixed "acc" marker make this
+        // distinctive despite the variable-length segments.
+        build: () => /\b(?:sc|ext|scauth|authress)_[A-Za-z0-9]{5,30}\.[A-Za-z0-9]{4,6}\.acc[_-][A-Za-z0-9-]{10,32}\.[A-Za-z0-9+/_=-]{30,120}\b/g,
+    },
 ];
 /**
  * Variable-name fragment that makes a high-entropy value worth flagging.
