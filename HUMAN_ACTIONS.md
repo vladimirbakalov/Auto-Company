@@ -57,6 +57,11 @@ No API for this — has to be the web UI, per repo:
    Marketplace"**.
 3. Accept the Marketplace Developer Agreement (one-time, covers all your
    Actions after the first).
+4. Fill in category + tagline/description — copy-paste text for both repos
+   is pre-written in `docs/marketing/marketplace-listing-cycle31.md`
+   (categories, tagline, longer description, pricing plan = Free). Both
+   repos' `LICENSE` and `action.yml` branding are already in place, so
+   that's the only free-text step left.
 
 Repos: `github.com/vladimirbakalov/pr-summary-action`,
 `github.com/vladimirbakalov/secret-scan-action`.
