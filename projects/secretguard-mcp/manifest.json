@@ -2,7 +2,7 @@
   "manifest_version": "0.3",
   "name": "secretguard-mcp",
   "version": "0.1.0",
-  "description": "Scans code for hardcoded secrets (AWS/Stripe/GitHub/Google/Slack/OpenAI/Anthropic/npm keys, private keys, JWTs, high-entropy credentials) before an AI coding agent writes or commits it.",
+  "description": "Scans code for hardcoded secrets (AWS/Stripe/GitHub/Google/Slack/OpenAI/Anthropic/npm/SendGrid/Twilio/Azure keys, private keys, JWTs, high-entropy credentials) before an AI coding agent writes or commits it.",
   "long_description": "secretguard-mcp exposes a single tool, scan_for_secrets, that an AI coding agent can call before writing a file or making a commit to catch hardcoded secrets at generation time instead of at CI/PR-review time. It runs entirely locally over stdio, needs no API key or account, and never returns a raw secret value — every finding comes back redacted. It reuses the same detection engine (pattern rules plus a Shannon-entropy generic rule) as secret-scan-action, a GitHub Action that performs the equivalent scan in CI.",
   "author": {
     "name": "Vladimir Bakalov",

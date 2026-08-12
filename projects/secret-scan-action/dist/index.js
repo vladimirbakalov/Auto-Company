@@ -32940,6 +32940,26 @@ exports.PATTERN_RULES = [
         description: "npm access token",
         build: () => /\bnpm_[A-Za-z0-9]{36}\b/g,
     },
+    {
+        id: "gcp-oauth-client-secret",
+        description: "Google Cloud OAuth client secret",
+        build: () => /\bGOCSPX-[A-Za-z0-9_-]{20,}\b/g,
+    },
+    {
+        id: "sendgrid-api-key",
+        description: "SendGrid API key",
+        build: () => /\bSG\.[A-Za-z0-9_-]{22}\.[A-Za-z0-9_-]{43}\b/g,
+    },
+    {
+        id: "twilio-api-key",
+        description: "Twilio API key",
+        build: () => /\bSK[0-9a-fA-F]{32}\b/g,
+    },
+    {
+        id: "azure-storage-account-key",
+        description: "Azure Storage account key (contextual)",
+        build: () => /\bAccountKey=([A-Za-z0-9+/]{86}==)/g,
+    },
 ];
 /**
  * Variable-name fragment that makes a high-entropy value worth flagging.

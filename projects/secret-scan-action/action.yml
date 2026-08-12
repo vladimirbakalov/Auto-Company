@@ -1,8 +1,8 @@
 name: "Secret Scan Action"
 description: >-
   Scans a pull request's changed lines for leaked secrets (AWS/Stripe/GitHub/
-  Google/Slack/OpenAI/Anthropic/npm keys, private key blocks, JWTs, and
-  generic high-entropy credentials) and fails the check on confirmed hits. Works with zero
+  Google/Slack/OpenAI/Anthropic/npm/SendGrid/Twilio/Azure keys, private key
+  blocks, JWTs, and generic high-entropy credentials) and fails the check on confirmed hits. Works with zero
   configuration; optionally add your own Anthropic API key to have Claude
   triage ambiguous generic-entropy matches and cut false positives.
 author: "Auto Company"

@@ -92,6 +92,30 @@ describe("scanLine — true positives (known-leaked-secret patterns)", () => {
     expect(findings.some((f) => f.ruleId === "npm-access-token" && f.confidence === "high")).toBe(true);
   });
 
+  it("flags a GCP OAuth client secret", () => {
+    const findings = scanLine(line(`const clientSecret = "GOCSPX-${"aB3_-cD4e".repeat(3)}";`));
+    expect(findings.some((f) => f.ruleId === "gcp-oauth-client-secret" && f.confidence === "high")).toBe(true);
+  });
+
+  it("flags a SendGrid API key", () => {
+    const key = `SG.${"a".repeat(22)}.${"b".repeat(43)}`;
+    const findings = scanLine(line(`const SENDGRID_API_KEY = "${key}";`));
+    expect(findings.some((f) => f.ruleId === "sendgrid-api-key" && f.confidence === "high")).toBe(true);
+  });
+
+  it("flags a Twilio API key", () => {
+    const findings = scanLine(line(`const twilioKey = "SK${"a1b2c3d4".repeat(4)}";`));
+    expect(findings.some((f) => f.ruleId === "twilio-api-key" && f.confidence === "high")).toBe(true);
+  });
+
+  it("flags an Azure Storage account key without also matching the generic rule", () => {
+    const key = `${"aB3+/9dE".repeat(10)}zzXXaB==`;
+    const findings = scanLine(line(`const connStr = "DefaultEndpointsProtocol=https;AccountName=acct;AccountKey=${key};EndpointSuffix=core.windows.net";`));
+    expect(findings.some((f) => f.ruleId === "azure-storage-account-key" && f.confidence === "high")).toBe(true);
+    const generic = findings.filter((f) => f.confidence === "generic");
+    expect(generic).toHaveLength(0);
+  });
+
   it("flags a generic high-entropy value assigned to a secret-like variable name", () => {
     const findings = scanLine(line(`const apiToken = "zT9pQ2xR7mK4vL8nW1sD6fH3jC0bA5eY";`));
     expect(findings.some((f) => f.ruleId === "generic-high-entropy-secret" && f.confidence === "generic")).toBe(
