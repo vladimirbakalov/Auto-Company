@@ -33131,6 +33131,19 @@ exports.PATTERN_RULES = [
         build: () => /\bduffel_(?:test|live)_[A-Za-z0-9_\-=]{43}\b/g,
     },
     {
+        id: "atlassian-api-token-atatt3",
+        description: "Atlassian API token (ATATT3 format)",
+        // Split out of upstream gitleaks' atlassian-api-token rule, which is
+        // actually two unrelated forms OR'd into one regex: a keyword-proximity
+        // form (kept separately below, in the generic keyword-proximity class)
+        // and this fixed "ATATT3" prefix + 186-char body form. The ATATT3 form
+        // needs no nearby keyword to be identified with confidence, so it
+        // belongs in the high-confidence tier with the rest of this file's
+        // fixed-prefix rules rather than alongside the keyword-gated form it
+        // shipped under upstream.
+        build: () => /\bATATT3[A-Za-z0-9_\-=]{186}\b/g,
+    },
+    {
         id: "easypost-api-token",
         description: "EasyPost API token",
         // EZAK + 54 case-insensitive alphanumeric chars, exact length. Fixed
@@ -34240,6 +34253,25 @@ exports.PATTERN_RULES = [
         // "[a-zA-Z0-9]{64}" to preserve that behavior directly. "generic" tier
         // for the same reason as the rest of this class.
         build: () => /[\w.-]{0,50}?(?:sumo|Sumo|SUMO)(?:[ \t\w.-]{0,20})[\s'"]{0,3}(?:=|>|:{1,3}=|\|\||:|=>|\?=|,)[`'"\s=]{0,5}([a-zA-Z0-9]{64})(?:[`'"\s;]|\\[nr]|$)/g,
+        confidence: "generic",
+    },
+    {
+        id: "atlassian-api-token",
+        description: "Atlassian API Token (contextual)",
+        // Keyword-proximity half of upstream gitleaks' atlassian-api-token
+        // rule; the fixed-prefix "ATATT3..." half is shipped separately as
+        // atlassian-api-token-atatt3 in the high-confidence tier above (see
+        // that rule's comment for why). Upstream restricts each of its three
+        // keywords ("atlassian", "confluence", "jira") to exactly three case
+        // spellings via an inline case-sensitive sub-pattern, so this rule is
+        // built without the "i" flag and spells out all nine explicit
+        // spellings, the same technique as okta-access-token etc. above. The
+        // value pattern (a 20-char alnum body + 4-char hex suffix) was
+        // case-insensitive under upstream's outer flag, so it is widened from
+        // "[a-z0-9]{20}[a-f0-9]{4}" to "[a-zA-Z0-9]{20}[a-fA-F0-9]{4}" here to
+        // preserve that behavior directly. "generic" tier for the same reason
+        // as the rest of this class.
+        build: () => /[\w.-]{0,50}?(?:ATLASSIAN|Atlassian|atlassian|CONFLUENCE|Confluence|confluence|JIRA|Jira|jira)(?:[ \t\w.-]{0,20})[\s'"]{0,3}(?:=|>|:{1,3}=|\|\||:|=>|\?=|,)[`'"\s=]{0,5}([a-zA-Z0-9]{20}[a-fA-F0-9]{4})(?:[`'"\s;]|\\[nr]|$)/g,
         confidence: "generic",
     },
 ];

@@ -326,6 +326,18 @@ describe("scanLine — true positives (known-leaked-secret patterns)", () => {
     expect(findings.some((f) => f.ruleId === "duffel-api-token")).toBe(false);
   });
 
+  it("flags an Atlassian API token (ATATT3 format)", () => {
+    const token = `ATATT3${"aB1cD2eF3gH4".repeat(16).slice(0, 186)}`; // 186 chars
+    const findings = scanLine(line(`const ATLASSIAN_TOKEN = "${token}";`));
+    expect(findings.some((f) => f.ruleId === "atlassian-api-token-atatt3" && f.confidence === "high")).toBe(true);
+  });
+
+  it("does not flag an ATATT3-shaped token whose body is one character short", () => {
+    const token = `ATATT3${"aB1cD2eF3gH4".repeat(16).slice(0, 185)}`; // 185 chars
+    const findings = scanLine(line(`const ATLASSIAN_TOKEN = "${token}";`));
+    expect(findings.some((f) => f.ruleId === "atlassian-api-token-atatt3")).toBe(false);
+  });
+
   it("flags an EasyPost API token", () => {
     const token = `EZAK${"aB1cD2eF3".repeat(6)}`; // 54 chars
     const findings = scanLine(line(`const EASYPOST_TOKEN = "${token}";`));
@@ -2270,6 +2282,24 @@ describe("scanLine — true positives (known-leaked-secret patterns)", () => {
     const value = "ab3fd1".repeat(11).slice(0, 63);
     const findings = scanLine(line(`const sumo_access_token = "${value}";`));
     expect(findings.some((f) => f.ruleId === "sumologic-access-token")).toBe(false);
+  });
+
+  it("flags an Atlassian API Token-shaped value when the keyword 'jira' is nearby", () => {
+    const value = "ab3fd1".repeat(4);
+    const findings = scanLine(line(`const jira_api_token = "${value}";`));
+    expect(findings.some((f) => f.ruleId === "atlassian-api-token" && f.confidence === "generic")).toBe(true);
+  });
+
+  it("does not flag a value shaped like an Atlassian API Token without the keyword nearby", () => {
+    const value = "ab3fd1".repeat(4);
+    const findings = scanLine(line(`const unrelated_var = "${value}";`));
+    expect(findings.some((f) => f.ruleId === "atlassian-api-token")).toBe(false);
+  });
+
+  it("does not flag an Atlassian API Token-shaped value that is one character short even with the keyword nearby", () => {
+    const value = "ab3fd1".repeat(4).slice(0, 23);
+    const findings = scanLine(line(`const jira_api_token = "${value}";`));
+    expect(findings.some((f) => f.ruleId === "atlassian-api-token")).toBe(false);
   });
 
   it("flags a generic high-entropy value assigned to a secret-like variable name", () => {
