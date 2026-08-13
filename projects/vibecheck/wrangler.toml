@@ -18,7 +18,7 @@ compatibility_flags = ["nodejs_compat"]
 [[d1_databases]]
 binding = "DB"
 database_name = "vibecheck-db"
-database_id = "2455ac1c-eafb-4f97-bbb5-cfc7dd44302d"
+database_id = "0552a496-3ab3-4a61-b72f-e749df5f85f8"
 
 # Two Cron Triggers, both feeding the same `scheduled` handler in
 # src/index.ts — Cloudflare Workers dispatches every entry in this array to
@@ -63,8 +63,8 @@ crons = ["* * * * *", "0 * * * *"]
 # turn into a 500 for the user.
 [[kv_namespaces]]
 binding = "WAITLIST"
-id = "4931c9ef8b154737872e15d2119429d4"
-preview_id = "f21354ccf418446b8069886b50eda440"
+id = "c613fd54d981469faee9fa77cea3cf2a"
+preview_id = "577843e382f04bef8b295ce0bbb3f46e"
 
 # Coarse per-IP rate-limit counters for the unauthenticated URL-probing/
 # scanning endpoints (POST /api/scan, POST /api/probe-check, POST
@@ -84,8 +84,8 @@ preview_id = "f21354ccf418446b8069886b50eda440"
 # availability regression for real traffic.
 [[kv_namespaces]]
 binding = "RATE_LIMIT"
-id = "91e21774b056420688813f9cbeb355b8"
-preview_id = "2ba1658ce8e8487298409afe8546eef9"
+id = "49f14d743ab24a05b808799b45845b3c"
+preview_id = "c489e8aee30f455abf2d584e46cf4e7c"
 
 [vars]
 ENVIRONMENT = "development"

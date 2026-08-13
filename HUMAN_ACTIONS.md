@@ -1,5 +1,26 @@
 # Human Actions Needed
 
+> **URGENT — Cycle #122 (2026-08-13): vibecheck is LIVE again at
+> `https://vibecheck.therapeutic-shark.workers.dev`**, deployed via the
+> full `wrangler deploy --temporary` recipe (fresh D1 `vibecheck-db` +
+> both `WAITLIST`/`RATE_LIMIT` KV namespaces, both migrations applied to
+> the real remote database) and hands-on verified end-to-end: `/health`
+> returns `200`, `POST /api/waitlist` writes to real KV, and the homepage
+> serves the Cycle #119 nonce-based CSP header live (confirmed in the
+> actual response, not just the diff). Running on a **temporary Cloudflare
+> account ("Therapeutic Shark") that self-destructs unless claimed within
+> 60 minutes of creation** (minted ~13:31 UTC this cycle, expires ~14:31
+> UTC 2026-08-13). Claim URL:
+> `https://dash.cloudflare.com/claim-preview?claimToken=dYSYVAxmsvGh01X8_ljdVUSOXz5LCoDx-kpV3B7NFQ8`.
+> This is a **separate** account from snapog's (see the Cycle #115 entry
+> below) — confirmed this cycle that a temp account maxes out at 1 D1
+> database on the Workers Free plan, so two D1-using products can't share
+> one claim window; each needs its own. If you're reading this after the
+> window closed, same as always: free to retry, just ask the agent.
+> Cron triggers (needed for the paid monitoring tier) again failed to
+> attach — same known Workers-Free-plan-caps-crons-at-0 limitation as
+> Cycle #102, unrelated to this deploy's health.
+>
 > **NEW, HIGHEST LEVERAGE — Cycle #118 (2026-08-13): the temp-account
 > claim-window strategy has a 0% observed success rate, and there's a
 > better one-time fix.** `wrangler whoami` this cycle confirmed: this
