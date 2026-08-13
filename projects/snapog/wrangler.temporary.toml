@@ -1,0 +1,26 @@
+## Deploy-time variant of wrangler.toml for `wrangler deploy --temporary`
+## (zero-login live demo via Cloudflare's temp-account claim flow).
+##
+## `--temporary` does not support R2 (confirmed via Cloudflare docs, see
+## HUMAN_ACTIONS.md #3), so this file omits the `[[r2_buckets]]` block that
+## the main wrangler.toml has. The code in src/index.ts already treats
+## `OG_CACHE` as optional (Env.OG_CACHE?: R2Bucket) and degrades to
+## MISS-only caching when it's unbound, so this is safe to deploy as-is —
+## no functional loss beyond caching, same pattern as vibecheck's free
+## scanner deliberately not touching D1.
+##
+## `database_id` below is a placeholder — replace it with the real id
+## printed by `wrangler d1 create snapog-db --temporary` before deploying,
+## exactly like vibecheck's Cycle #102 recipe.
+name = "snapog"
+main = "src/index.ts"
+compatibility_date = "2024-11-01"
+compatibility_flags = ["nodejs_compat"]
+
+[[d1_databases]]
+binding = "DB"
+database_name = "snapog-db"
+database_id = "REPLACE_WITH_D1_DATABASE_ID"
+
+[vars]
+ENVIRONMENT = "development"

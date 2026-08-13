@@ -153,8 +153,8 @@ app.get('/og', async c => {
   const cacheKey = await buildCacheKey(params, watermark);
   const r2Key = `og/${cacheKey}.png`;
 
-  // ── R2 cache lookup ──
-  const cached = await c.env.OG_CACHE.get(r2Key);
+  // ── R2 cache lookup (skipped entirely if OG_CACHE isn't bound — see Env) ──
+  const cached = c.env.OG_CACHE ? await c.env.OG_CACHE.get(r2Key) : null;
   if (cached) {
     // Cache hit — return stored PNG, still track usage (counts toward limit)
     await recordUsage(c.env.DB, apiKey, params.template ?? 'default', true);
@@ -173,13 +173,16 @@ app.get('/og', async c => {
   const imageResponse = await generateOGImage(params, watermark);
   const imageBuffer = await imageResponse.arrayBuffer();
 
-  // Store in R2 (fire-and-forget, don't block response)
-  c.executionCtx.waitUntil(
-    c.env.OG_CACHE.put(r2Key, imageBuffer.slice(0), {
-      httpMetadata: { contentType: 'image/png' },
-      customMetadata: { tier: apiKey.tier, template: params.template ?? 'default' },
-    })
-  );
+  // Store in R2 (fire-and-forget, don't block response). No-op if OG_CACHE
+  // isn't bound (e.g. a --temporary deploy) — every request is a MISS.
+  if (c.env.OG_CACHE) {
+    c.executionCtx.waitUntil(
+      c.env.OG_CACHE.put(r2Key, imageBuffer.slice(0), {
+        httpMetadata: { contentType: 'image/png' },
+        customMetadata: { tier: apiKey.tier, template: params.template ?? 'default' },
+      })
+    );
+  }
 
   // Record usage (also fire-and-forget after we have the image)
   c.executionCtx.waitUntil(

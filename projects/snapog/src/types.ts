@@ -33,7 +33,10 @@ export interface OGParams {
 
 export interface Env {
   DB: D1Database;
-  OG_CACHE: R2Bucket;
+  // Optional: `wrangler deploy --temporary` (used for zero-login live demos)
+  // doesn't support R2, so caching degrades gracefully to a MISS-only /og
+  // path rather than failing the deploy or crashing at request time.
+  OG_CACHE?: R2Bucket;
   ENVIRONMENT: string;
   AUTH_SECRET?: string;
 }
