@@ -1,5 +1,9 @@
 # BYOK AI PR Summary
 
+[![CI](https://github.com/vladimirbakalov/pr-summary-action/actions/workflows/ci.yml/badge.svg)](https://github.com/vladimirbakalov/pr-summary-action/actions/workflows/ci.yml)
+[![Latest release](https://img.shields.io/github/v/tag/vladimirbakalov/pr-summary-action?label=release)](https://github.com/vladimirbakalov/pr-summary-action/releases)
+[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
+
 A free, open-source GitHub Action that posts an AI-generated summary — what
 changed, why, and what to watch out for — as a comment on every pull
 request. It updates that same comment on every push instead of spamming a

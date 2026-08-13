@@ -1,5 +1,9 @@
 # Secret Scan Action
 
+[![CI](https://github.com/vladimirbakalov/secret-scan-action/actions/workflows/ci.yml/badge.svg)](https://github.com/vladimirbakalov/secret-scan-action/actions/workflows/ci.yml)
+[![Latest release](https://img.shields.io/github/v/tag/vladimirbakalov/secret-scan-action?label=release)](https://github.com/vladimirbakalov/secret-scan-action/releases)
+[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
+
 A free GitHub Action that scans a pull request's **changed lines only** for
 leaked secrets — AWS keys, Stripe keys, GitHub tokens, Google API keys and
 OAuth client secrets, Slack tokens and incoming webhook URLs, Shopify access

@@ -1,5 +1,9 @@
 # secretguard-mcp
 
+[![CI](https://github.com/vladimirbakalov/secretguard-mcp/actions/workflows/ci.yml/badge.svg)](https://github.com/vladimirbakalov/secretguard-mcp/actions/workflows/ci.yml)
+[![Latest release](https://img.shields.io/github/v/tag/vladimirbakalov/secretguard-mcp?label=release)](https://github.com/vladimirbakalov/secretguard-mcp/releases)
+[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
+
 An MCP (Model Context Protocol) server that scans a code string for
 hardcoded secrets — AWS keys, Stripe keys, GitHub tokens, Google API keys and
 OAuth client secrets, Slack tokens and incoming webhook URLs, Shopify access
