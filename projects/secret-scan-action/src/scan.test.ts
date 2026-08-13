@@ -338,6 +338,35 @@ describe("scanLine — true positives (known-leaked-secret patterns)", () => {
     expect(findings.some((f) => f.ruleId === "atlassian-api-token-atatt3")).toBe(false);
   });
 
+  it("flags a Sourcegraph access token (sgp_<16-hex>_<40-hex> form)", () => {
+    const token = `sgp_${"a1b2c3d4e5f6a7b8"}_${"c".repeat(40)}`;
+    const findings = scanLine(line(`const SRC_TOKEN = "${token}";`));
+    expect(findings.some((f) => f.ruleId === "sourcegraph-access-token" && f.confidence === "high")).toBe(true);
+  });
+
+  it("flags a Sourcegraph access token (sgp_local_<40-hex> form)", () => {
+    const token = `sgp_local_${"d".repeat(40)}`;
+    const findings = scanLine(line(`const SRC_TOKEN = "${token}";`));
+    expect(findings.some((f) => f.ruleId === "sourcegraph-access-token" && f.confidence === "high")).toBe(true);
+  });
+
+  it("flags a Sourcegraph access token (bare sgp_<40-hex> form)", () => {
+    const token = `sgp_${"e".repeat(40)}`;
+    const findings = scanLine(line(`const SRC_TOKEN = "${token}";`));
+    expect(findings.some((f) => f.ruleId === "sourcegraph-access-token" && f.confidence === "high")).toBe(true);
+  });
+
+  it("does not flag a Sourcegraph-shaped token whose body is one character short", () => {
+    const token = `sgp_${"e".repeat(39)}`;
+    const findings = scanLine(line(`const SRC_TOKEN = "${token}";`));
+    expect(findings.some((f) => f.ruleId === "sourcegraph-access-token")).toBe(false);
+  });
+
+  it("does not flag a bare 40-char hex string with no sgp_ prefix, even near the word 'sourcegraph'", () => {
+    const findings = scanLine(line(`// sourcegraph commit: ${"f".repeat(40)}`));
+    expect(findings.some((f) => f.ruleId === "sourcegraph-access-token")).toBe(false);
+  });
+
   it("flags an EasyPost API token", () => {
     const token = `EZAK${"aB1cD2eF3".repeat(6)}`; // 54 chars
     const findings = scanLine(line(`const EASYPOST_TOKEN = "${token}";`));

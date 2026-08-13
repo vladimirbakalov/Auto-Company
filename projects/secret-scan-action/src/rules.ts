@@ -322,6 +322,22 @@ export const PATTERN_RULES: PatternRule[] = [
     build: () => /\bATATT3[A-Za-z0-9_\-=]{186}\b/g,
   },
   {
+    id: "sourcegraph-access-token",
+    description: "Sourcegraph access token",
+    // Upstream's regex OR's three alternatives together: sgp_<16-hex>_<40-hex>,
+    // sgp_local_<40-hex>, and sgp_<40-hex> — all fixed-prefix, shipped here —
+    // plus a fourth, bare 40-char hex string with NO prefix at all, gated only
+    // by upstream's whole-line "keywords" proximity check ("sgp_"/"sourcegraph"
+    // anywhere in the line). That bare form is deliberately dropped: this
+    // codebase's keyword-proximity rules (see the generic tier below) require
+    // the keyword to sit directly in front of the value as part of an
+    // assignment shape; upstream's "keywords" field is a much looser same-line
+    // pre-filter, and a bare 40-hex-char value is structurally identical to a
+    // git commit SHA, making it far too high-risk to ship even with that
+    // pre-filter. Resolves the open question from Cycle #51.
+    build: () => /\bsgp_(?:[a-fA-F0-9]{16}|local)_[a-fA-F0-9]{40}\b|\bsgp_[a-fA-F0-9]{40}\b/g,
+  },
+  {
     id: "easypost-api-token",
     description: "EasyPost API token",
     // EZAK + 54 case-insensitive alphanumeric chars, exact length. Fixed
