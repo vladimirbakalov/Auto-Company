@@ -56,6 +56,22 @@ describe('buildElement', () => {
     expect(findText(el, '— Ada Lovelace')).toBe(true);
   });
 
+  it('renders the domain when provided', () => {
+    const el = buildElement({ ...base, domain: 'example.com' }, false);
+    expect(findText(el, 'example.com')).toBe(true);
+  });
+
+  it('renders the tag pill when provided', () => {
+    const el = buildElement({ ...base, tag: 'Engineering' }, false);
+    expect(findText(el, 'Engineering')).toBe(true);
+  });
+
+  it('does not render a domain or tag when neither is provided', () => {
+    const el = buildElement(base, false);
+    expect(findText(el, 'example.com')).toBe(false);
+    expect(findText(el, 'Engineering')).toBe(false);
+  });
+
   it('does not throw for every template x watermark combination', () => {
     const templates: Array<OGParams['template']> = [undefined, 'default', 'blog', 'article'];
     for (const template of templates) {
