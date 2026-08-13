@@ -7,11 +7,10 @@
 // dashboard → manage monitors."
 //
 // Split the same way as monitors.ts: pure token/hash/expiry/signing
-// functions (testable without D1) vs. thin D1-touching wrappers. The D1
-// wrappers are real implementations, not stubs, EXCEPT where explicitly
-// marked STUB below — those need a live D1 binding to actually exercise and
-// are out of this change's test surface (no miniflare/D1 simulation wired
-// into vitest here), so they're flagged rather than silently assumed-correct.
+// functions (testable without D1) vs. thin D1-touching wrappers. All D1
+// wrappers below are exercised against real D1 (not mocks) in
+// test/index.workers.test.ts via @cloudflare/vitest-pool-workers — run with
+// `npm run test:workers`.
 
 import type { UserRow } from './types';
 
@@ -117,11 +116,9 @@ export const SESSION_TTL_MS = 30 * 24 * 60 * 60 * 1000; // 30 days
 
 // ── D1-touching wrappers ─────────────────────────────────────────────────────
 
-// STUB: real implementation is a straightforward upsert-by-email, but it's
-// untested against a live D1 in this change (no miniflare/D1 pool wired into
-// vitest yet — see note at top of file). Wire up + integration-test once a
-// local D1 test harness exists; the SQL shape below is what ADR §5/§6 step 2
-// specifies (upsert on `checkout.session.completed`).
+// Upsert-by-email on `checkout.session.completed`, per ADR §5/§6 step 2.
+// Integration-tested against real D1 (real UNIQUE(email) constraint driving
+// the ON CONFLICT path) in test/index.workers.test.ts.
 export async function upsertUserFromCheckout(
   db: D1Database,
   params: { email: string; stripeCustomerId: string; stripeSubscriptionId: string | null }
@@ -183,10 +180,11 @@ export async function validateAndConsumeMagicLink(db: D1Database, token: string)
   return link.user_id;
 }
 
-// STUB: generates + stores a new API key, replacing any previous one (single
-// key per user, per ADR §5 — "generate on first dashboard visit, shown once,
-// stored hashed"). Not integration-tested against live D1 in this change;
-// the hashing/generation halves it calls (generateToken/hashToken) are.
+// Generates + stores a new API key, replacing any previous one (single key
+// per user, per ADR §5 — "generate on first dashboard visit, shown once,
+// stored hashed"). Integration-tested against real D1 in
+// test/index.workers.test.ts, including that regenerating invalidates the
+// previous key.
 export async function generateAndStoreApiKey(db: D1Database, userId: number): Promise<string> {
   const key = generateToken(24);
   const hash = await hashToken(key);
