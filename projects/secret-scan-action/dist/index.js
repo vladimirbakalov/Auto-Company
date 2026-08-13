@@ -33473,6 +33473,45 @@ exports.PATTERN_RULES = [
         build: () => /[\w.-]{0,50}?dropbox(?:[ \t\w.-]{0,20})[\s'"]{0,3}(?:=|>|:{1,3}=|\|\||:|=>|\?=|,)[`'"\s=]{0,5}([a-z0-9]{15})(?:[`'"\s;]|\\[nr]|$)/gi,
         confidence: "generic",
     },
+    {
+        id: "bitbucket-client-id",
+        description: "Bitbucket Client ID (contextual)",
+        // Same keyword-proximity shape as the rest of this class. Value is a
+        // bare 32-char lowercase-alnum value, gated on "bitbucket" appearing
+        // before the assignment. "generic" tier for the same reason as the
+        // rest of this class.
+        build: () => /[\w.-]{0,50}?bitbucket(?:[ \t\w.-]{0,20})[\s'"]{0,3}(?:=|>|:{1,3}=|\|\||:|=>|\?=|,)[`'"\s=]{0,5}([a-z0-9]{32})(?:[`'"\s;]|\\[nr]|$)/gi,
+        confidence: "generic",
+    },
+    {
+        id: "twitch-api-token",
+        description: "Twitch API Token (contextual)",
+        // Same keyword-proximity shape. Value is a bare 30-char lowercase-alnum
+        // value, gated on "twitch" appearing before the assignment. "generic"
+        // tier for the same reason as the rest of this class.
+        build: () => /[\w.-]{0,50}?twitch(?:[ \t\w.-]{0,20})[\s'"]{0,3}(?:=|>|:{1,3}=|\|\||:|=>|\?=|,)[`'"\s=]{0,5}([a-z0-9]{30})(?:[`'"\s;]|\\[nr]|$)/gi,
+        confidence: "generic",
+    },
+    {
+        id: "asana-client-id",
+        description: "Asana Client ID (contextual)",
+        // Same keyword-proximity shape. Value is a bare 16-digit numeric value,
+        // gated on "asana" appearing before the assignment. "generic" tier for
+        // the same reason as the rest of this class.
+        build: () => /[\w.-]{0,50}?asana(?:[ \t\w.-]{0,20})[\s'"]{0,3}(?:=|>|:{1,3}=|\|\||:|=>|\?=|,)[`'"\s=]{0,5}([0-9]{16})(?:[`'"\s;]|\\[nr]|$)/gi,
+        confidence: "generic",
+    },
+    {
+        id: "asana-client-secret",
+        description: "Asana Client Secret (contextual)",
+        // Same keyword-proximity shape and "asana" keyword gate as
+        // asana-client-id above, but a distinct value shape (32-char
+        // lowercase-alnum) distinguishes it as its own rule — same
+        // two-rules-one-keyword pattern used for discord-client-id/-secret.
+        // "generic" tier for the same reason as the rest of this class.
+        build: () => /[\w.-]{0,50}?asana(?:[ \t\w.-]{0,20})[\s'"]{0,3}(?:=|>|:{1,3}=|\|\||:|=>|\?=|,)[`'"\s=]{0,5}([a-z0-9]{32})(?:[`'"\s;]|\\[nr]|$)/gi,
+        confidence: "generic",
+    },
 ];
 /**
  * Variable-name fragment that makes a high-entropy value worth flagging.

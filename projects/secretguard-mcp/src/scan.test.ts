@@ -920,6 +920,78 @@ describe("scanLine — true positives (known-leaked-secret patterns)", () => {
     expect(findings.some((f) => f.ruleId === "dropbox-api-token")).toBe(false);
   });
 
+  it("flags a Bitbucket Client ID-shaped value when the keyword 'bitbucket' is nearby", () => {
+    const value = "aB3fD1x9Qz".repeat(4).slice(0, 32).toLowerCase();
+    const findings = scanLine(line(`const bitbucket_client_id = "${value}";`));
+    expect(findings.some((f) => f.ruleId === "bitbucket-client-id" && f.confidence === "generic")).toBe(true);
+  });
+
+  it("does not flag a 32-char value shaped like a Bitbucket Client ID without the keyword nearby", () => {
+    const value = "aB3fD1x9Qz".repeat(4).slice(0, 32).toLowerCase();
+    const findings = scanLine(line(`const unrelated_var = "${value}";`));
+    expect(findings.some((f) => f.ruleId === "bitbucket-client-id")).toBe(false);
+  });
+
+  it("does not flag a Bitbucket Client ID-shaped value that is one character short even with the keyword nearby", () => {
+    const value = "aB3fD1x9Qz".repeat(4).slice(0, 31).toLowerCase();
+    const findings = scanLine(line(`const bitbucket_client_id = "${value}";`));
+    expect(findings.some((f) => f.ruleId === "bitbucket-client-id")).toBe(false);
+  });
+
+  it("flags a Twitch API token-shaped value when the keyword 'twitch' is nearby", () => {
+    const value = "aB3fD1x9Qz".repeat(3).slice(0, 30).toLowerCase();
+    const findings = scanLine(line(`const twitch_api_token = "${value}";`));
+    expect(findings.some((f) => f.ruleId === "twitch-api-token" && f.confidence === "generic")).toBe(true);
+  });
+
+  it("does not flag a 30-char value shaped like a Twitch API token without the keyword nearby", () => {
+    const value = "aB3fD1x9Qz".repeat(3).slice(0, 30).toLowerCase();
+    const findings = scanLine(line(`const unrelated_var = "${value}";`));
+    expect(findings.some((f) => f.ruleId === "twitch-api-token")).toBe(false);
+  });
+
+  it("does not flag a Twitch API token-shaped value that is one character short even with the keyword nearby", () => {
+    const value = "aB3fD1x9Qz".repeat(3).slice(0, 29).toLowerCase();
+    const findings = scanLine(line(`const twitch_api_token = "${value}";`));
+    expect(findings.some((f) => f.ruleId === "twitch-api-token")).toBe(false);
+  });
+
+  it("flags an Asana Client ID-shaped value when the keyword 'asana' is nearby", () => {
+    const value = "123456789".repeat(2).slice(0, 16);
+    const findings = scanLine(line(`const asana_client_id = "${value}";`));
+    expect(findings.some((f) => f.ruleId === "asana-client-id" && f.confidence === "generic")).toBe(true);
+  });
+
+  it("does not flag a 16-digit value shaped like an Asana Client ID without the keyword nearby", () => {
+    const value = "123456789".repeat(2).slice(0, 16);
+    const findings = scanLine(line(`const unrelated_var = "${value}";`));
+    expect(findings.some((f) => f.ruleId === "asana-client-id")).toBe(false);
+  });
+
+  it("does not flag an Asana Client ID-shaped value that is one digit short even with the keyword nearby", () => {
+    const value = "123456789".repeat(2).slice(0, 15);
+    const findings = scanLine(line(`const asana_client_id = "${value}";`));
+    expect(findings.some((f) => f.ruleId === "asana-client-id")).toBe(false);
+  });
+
+  it("flags an Asana Client Secret-shaped value when the keyword 'asana' is nearby", () => {
+    const value = "aB3fD1x9Qz".repeat(4).slice(0, 32).toLowerCase();
+    const findings = scanLine(line(`const asana_client_secret = "${value}";`));
+    expect(findings.some((f) => f.ruleId === "asana-client-secret" && f.confidence === "generic")).toBe(true);
+  });
+
+  it("does not flag a 32-char value shaped like an Asana Client Secret without the keyword nearby", () => {
+    const value = "aB3fD1x9Qz".repeat(4).slice(0, 32).toLowerCase();
+    const findings = scanLine(line(`const unrelated_var = "${value}";`));
+    expect(findings.some((f) => f.ruleId === "asana-client-secret")).toBe(false);
+  });
+
+  it("does not flag an Asana Client Secret-shaped value that is one character short even with the keyword nearby", () => {
+    const value = "aB3fD1x9Qz".repeat(4).slice(0, 31).toLowerCase();
+    const findings = scanLine(line(`const asana_client_secret = "${value}";`));
+    expect(findings.some((f) => f.ruleId === "asana-client-secret")).toBe(false);
+  });
+
   it("flags a generic high-entropy value assigned to a secret-like variable name", () => {
     const findings = scanLine(line(`const apiToken = "zT9pQ2xR7mK4vL8nW1sD6fH3jC0bA5eY";`));
     expect(findings.some((f) => f.ruleId === "generic-high-entropy-secret" && f.confidence === "generic")).toBe(
