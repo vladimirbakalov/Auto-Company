@@ -6,12 +6,12 @@
     "url": "https://github.com/vladimirbakalov/secretguard-mcp",
     "source": "github"
   },
-  "version": "0.1.1",
+  "version": "0.1.2",
   "packages": [
     {
       "registryType": "mcpb",
-      "identifier": "https://github.com/vladimirbakalov/secretguard-mcp/releases/download/v0.1.1-mcpb/secretguard-mcp-0.1.1.mcpb",
-      "fileSha256": "c8622d8aa8c4b86b0df111e633dadee8706cf79ebb5f3986669dd79af1e550c5",
+      "identifier": "https://github.com/vladimirbakalov/secretguard-mcp/releases/download/v0.1.2-mcpb/secretguard-mcp-0.1.2.mcpb",
+      "fileSha256": "78b292ef3405fee38f41322738d653c5439c62a738f4d56623c1c790ee5ed066",
       "transport": {
         "type": "stdio"
       }

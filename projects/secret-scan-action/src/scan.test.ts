@@ -439,6 +439,94 @@ describe("scanLine — true positives (known-leaked-secret patterns)", () => {
     expect(findings.some((f) => f.ruleId === "square-access-token")).toBe(false);
   });
 
+  it("flags a Square OAuth secret", () => {
+    const token = `sq0csp-${"aB1cD2eF3".repeat(5).slice(0, 40)}`;
+    const findings = scanLine(line(`const SQUARE_SECRET = "${token}";`));
+    expect(findings.some((f) => f.ruleId === "square-oauth-secret" && f.confidence === "high")).toBe(true);
+  });
+
+  it("does not flag a Square-OAuth-secret-shaped token that is one character short", () => {
+    const token = `sq0csp-${"aB1cD2eF3".repeat(5).slice(0, 39)}`;
+    const findings = scanLine(line(`const SQUARE_SECRET = "${token}";`));
+    expect(findings.some((f) => f.ruleId === "square-oauth-secret")).toBe(false);
+  });
+
+  it("flags a Stripe test secret key", () => {
+    const findings = scanLine(line(`const stripeKey = "sk_test_${"4eC39HqLyjWDarjtT1zdp7dc"}";`));
+    expect(findings.some((f) => f.ruleId === "stripe-test-secret-key" && f.confidence === "high")).toBe(true);
+  });
+
+  it("flags a Stripe test restricted key", () => {
+    const findings = scanLine(line(`const stripeKey = "rk_test_${"51H8anLkjasdkjKJHKJHkjhKJHkjh12"}";`));
+    expect(findings.some((f) => f.ruleId === "stripe-test-restricted-key")).toBe(true);
+  });
+
+  it("flags a Grafana service account token", () => {
+    const token = `glsa_${"aB1cD2eF3".repeat(4).slice(0, 32)}`;
+    const findings = scanLine(line(`const GRAFANA_TOKEN = "${token}";`));
+    expect(findings.some((f) => f.ruleId === "grafana-service-account-token" && f.confidence === "high")).toBe(
+      true,
+    );
+  });
+
+  it("does not flag a Grafana-service-account-token-shaped token that is one character short", () => {
+    const token = `glsa_${"aB1cD2eF3".repeat(4).slice(0, 31)}`;
+    const findings = scanLine(line(`const GRAFANA_TOKEN = "${token}";`));
+    expect(findings.some((f) => f.ruleId === "grafana-service-account-token")).toBe(false);
+  });
+
+  it("flags a Render API key", () => {
+    const token = `rnd_${"aB1cD2eF3".repeat(3).slice(0, 20)}`;
+    const findings = scanLine(line(`const RENDER_KEY = "${token}";`));
+    expect(findings.some((f) => f.ruleId === "render-api-key" && f.confidence === "high")).toBe(true);
+  });
+
+  it("does not flag a Render-API-key-shaped token that is one character short", () => {
+    const token = `rnd_${"aB1cD2eF3".repeat(3).slice(0, 19)}`;
+    const findings = scanLine(line(`const RENDER_KEY = "${token}";`));
+    expect(findings.some((f) => f.ruleId === "render-api-key")).toBe(false);
+  });
+
+  it("flags a Discord webhook URL", () => {
+    const url = `https://discord.com/api/webhooks/1234567890123456789/${"aB1cD2eF3".repeat(8).slice(0, 68)}`;
+    const findings = scanLine(line(`const WEBHOOK = "${url}";`));
+    expect(findings.some((f) => f.ruleId === "discord-webhook-url" && f.confidence === "high")).toBe(true);
+  });
+
+  it("flags a discordapp.com webhook URL variant", () => {
+    const url = `https://discordapp.com/api/webhooks/1234567890123456789/${"aB1cD2eF3".repeat(8).slice(0, 68)}`;
+    const findings = scanLine(line(`const WEBHOOK = "${url}";`));
+    expect(findings.some((f) => f.ruleId === "discord-webhook-url" && f.confidence === "high")).toBe(true);
+  });
+
+  it("flags a PyPI API token", () => {
+    const token = `pypi-AgEIcHlwaS5vcmc${"aB1cD2eF3".repeat(6).slice(0, 50)}`;
+    const findings = scanLine(line(`const PYPI_TOKEN = "${token}";`));
+    expect(findings.some((f) => f.ruleId === "pypi-api-token" && f.confidence === "high")).toBe(true);
+  });
+
+  it("does not flag a PyPI-API-token-shaped token that is one character short", () => {
+    const token = `pypi-AgEIcHlwaS5vcmc${"aB1cD2eF3".repeat(6).slice(0, 49)}`;
+    const findings = scanLine(line(`const PYPI_TOKEN = "${token}";`));
+    expect(findings.some((f) => f.ruleId === "pypi-api-token")).toBe(false);
+  });
+
+  it("flags a HashiCorp Vault service token", () => {
+    const token = `hvs.${"aB1cD2eF3".repeat(3).slice(0, 24)}`;
+    const findings = scanLine(line(`const VAULT_TOKEN = "${token}";`));
+    expect(findings.some((f) => f.ruleId === "hashicorp-vault-service-token" && f.confidence === "high")).toBe(
+      true,
+    );
+  });
+
+  it("flags a HashiCorp Vault batch token", () => {
+    const token = `hvb.${"aB1cD2eF3".repeat(3).slice(0, 24)}`;
+    const findings = scanLine(line(`const VAULT_TOKEN = "${token}";`));
+    expect(findings.some((f) => f.ruleId === "hashicorp-vault-batch-token" && f.confidence === "high")).toBe(
+      true,
+    );
+  });
+
   it("flags an age encryption secret key", () => {
     const body = "QPZRY9X8GF2TVDW0S3JN54KHCE6MUA7L".repeat(2).slice(0, 58);
     const findings = scanLine(line(`const AGE_KEY = "AGE-SECRET-KEY-1${body}";`));

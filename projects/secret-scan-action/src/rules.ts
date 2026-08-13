@@ -1589,6 +1589,67 @@ export const PATTERN_RULES: PatternRule[] = [
     confidence: "generic",
     pathFilter: /\.(?:tf|hcl)$/i,
   },
+  {
+    id: "square-oauth-secret",
+    description: "Square OAuth application secret",
+    // sq0csp- + 40-50 word/hyphen chars, distinct from square-access-token's
+    // sq0atp- prefix (that one is the issued access token; this one is the
+    // OAuth application's client secret). Same distinctive-prefix confidence
+    // as the existing square-access-token rule above.
+    build: () => /\bsq0csp-[\w-]{40,50}\b/g,
+  },
+  {
+    id: "stripe-test-secret-key",
+    description: "Stripe test secret key",
+    // Same shape as stripe-live-secret-key but for the sk_test_ prefix used
+    // in non-production Stripe environments. Still a real credential capable
+    // of hitting a live-mode-disabled API, so it's high confidence, not generic.
+    build: () => /\bsk_test_[0-9a-zA-Z]{16,}\b/g,
+  },
+  {
+    id: "stripe-test-restricted-key",
+    description: "Stripe test restricted key",
+    build: () => /\brk_test_[0-9a-zA-Z]{16,}\b/g,
+  },
+  {
+    id: "grafana-service-account-token",
+    description: "Grafana service account token",
+    // glsa_ prefix, introduced alongside Grafana's service-account model
+    // (replacing the older unprefixed API key format, which has no
+    // distinctive shape and isn't included here to avoid false positives).
+    build: () => /\bglsa_[A-Za-z0-9]{32,}\b/g,
+  },
+  {
+    id: "render-api-key",
+    description: "Render API key",
+    build: () => /\brnd_[A-Za-z0-9]{20,}\b/g,
+  },
+  {
+    id: "discord-webhook-url",
+    description: "Discord webhook URL",
+    // Full webhook URLs are bearer credentials on their own (no auth header
+    // needed to post), so a match is a near-certain live webhook, not just a
+    // contextual hint.
+    build: () => /\bhttps:\/\/discord(?:app)?\.com\/api\/webhooks\/\d{17,20}\/[\w-]{60,90}\b/g,
+  },
+  {
+    id: "pypi-api-token",
+    description: "PyPI API token",
+    // All PyPI upload tokens share the fixed "pypi-AgEIcHlwaS5vcmc" prefix
+    // (base64 of a constant "pypi.org"-rooted macaroon header), making this
+    // one of the most distinctive prefixes of any provider token.
+    build: () => /\bpypi-AgEIcHlwaS5vcmc[A-Za-z0-9_-]{50,}\b/g,
+  },
+  {
+    id: "hashicorp-vault-service-token",
+    description: "HashiCorp Vault service token",
+    build: () => /\bhvs\.[A-Za-z0-9_-]{24,100}\b/g,
+  },
+  {
+    id: "hashicorp-vault-batch-token",
+    description: "HashiCorp Vault batch token",
+    build: () => /\bhvb\.[A-Za-z0-9_-]{24,100}\b/g,
+  },
 ];
 
 /**
