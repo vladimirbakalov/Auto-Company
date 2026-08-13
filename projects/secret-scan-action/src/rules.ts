@@ -1030,6 +1030,130 @@ export const PATTERN_RULES: PatternRule[] = [
       /[\w.-]{0,50}?dnkey(?:[ \t\w.-]{0,20})[\s'"]{0,3}(?:=|>|:{1,3}=|\|\||:|=>|\?=|,)[`'"\s=]{0,5}(dnkey-[a-z0-9=_-]{26}-[a-z0-9=_-]{52})(?:[`'"\s;]|\\[nr]|$)/gi,
     confidence: "generic",
   },
+  {
+    id: "lob-api-key",
+    description: "Lob API Key (contextual)",
+    // Same keyword-proximity shape. Value has a fixed "live_"/"test_"
+    // prefix (non-capturing alternation) plus a 35-char hex body, gated on
+    // "lob" appearing before the assignment. "generic" tier for the same
+    // reason as the rest of this class.
+    build: () =>
+      /[\w.-]{0,50}?lob(?:[ \t\w.-]{0,20})[\s'"]{0,3}(?:=|>|:{1,3}=|\|\||:|=>|\?=|,)[`'"\s=]{0,5}((?:live|test)_[a-f0-9]{35})(?:[`'"\s;]|\\[nr]|$)/gi,
+    confidence: "generic",
+  },
+  {
+    id: "lob-pub-api-key",
+    description: "Lob Publishable API Key (contextual)",
+    // Same keyword-proximity shape and keyword gate as lob-api-key. Value
+    // has a fixed "test_pub_"/"live_pub_" prefix (non-capturing
+    // alternation) plus a 31-char hex body. "generic" tier for the same
+    // reason as the rest of this class.
+    build: () =>
+      /[\w.-]{0,50}?lob(?:[ \t\w.-]{0,20})[\s'"]{0,3}(?:=|>|:{1,3}=|\|\||:|=>|\?=|,)[`'"\s=]{0,5}((?:test|live)_pub_[a-f0-9]{31})(?:[`'"\s;]|\\[nr]|$)/gi,
+    confidence: "generic",
+  },
+  {
+    id: "looker-client-id",
+    description: "Looker Client ID (contextual)",
+    // Same keyword-proximity shape. Value is a bare 20-char lowercase-alnum
+    // value, gated on "looker" appearing before the assignment. "generic"
+    // tier for the same reason as the rest of this class.
+    build: () =>
+      /[\w.-]{0,50}?looker(?:[ \t\w.-]{0,20})[\s'"]{0,3}(?:=|>|:{1,3}=|\|\||:|=>|\?=|,)[`'"\s=]{0,5}([a-z0-9]{20})(?:[`'"\s;]|\\[nr]|$)/gi,
+    confidence: "generic",
+  },
+  {
+    id: "looker-client-secret",
+    description: "Looker Client Secret (contextual)",
+    // Same keyword-proximity shape and keyword gate as looker-client-id.
+    // Value is a bare 24-char lowercase-alnum value (longer than the
+    // client ID shape, distinguishing the two rules). "generic" tier for
+    // the same reason as the rest of this class.
+    build: () =>
+      /[\w.-]{0,50}?looker(?:[ \t\w.-]{0,20})[\s'"]{0,3}(?:=|>|:{1,3}=|\|\||:|=>|\?=|,)[`'"\s=]{0,5}([a-z0-9]{24})(?:[`'"\s;]|\\[nr]|$)/gi,
+    confidence: "generic",
+  },
+  {
+    id: "mailgun-private-api-token",
+    description: "Mailgun Private API Token (contextual)",
+    // Same keyword-proximity shape. Value has a fixed "key-" prefix plus a
+    // 32-char hex body, gated on "mailgun" appearing before the
+    // assignment. "generic" tier for the same reason as the rest of this
+    // class.
+    build: () =>
+      /[\w.-]{0,50}?mailgun(?:[ \t\w.-]{0,20})[\s'"]{0,3}(?:=|>|:{1,3}=|\|\||:|=>|\?=|,)[`'"\s=]{0,5}(key-[a-f0-9]{32})(?:[`'"\s;]|\\[nr]|$)/gi,
+    confidence: "generic",
+  },
+  {
+    id: "mailgun-pub-key",
+    description: "Mailgun Public Validation Key (contextual)",
+    // Same keyword-proximity shape and keyword gate as
+    // mailgun-private-api-token. Value has a fixed "pubkey-" prefix plus a
+    // 32-char hex body. "generic" tier for the same reason as the rest of
+    // this class.
+    build: () =>
+      /[\w.-]{0,50}?mailgun(?:[ \t\w.-]{0,20})[\s'"]{0,3}(?:=|>|:{1,3}=|\|\||:|=>|\?=|,)[`'"\s=]{0,5}(pubkey-[a-f0-9]{32})(?:[`'"\s;]|\\[nr]|$)/gi,
+    confidence: "generic",
+  },
+  {
+    id: "mailgun-signing-key",
+    description: "Mailgun Webhook Signing Key (contextual)",
+    // Same keyword-proximity shape and keyword gate as
+    // mailgun-private-api-token. Value is a 32-hex segment, an 8-hex
+    // segment, and another 8-hex segment, hyphen-separated and kept
+    // inside one capture group. "generic" tier for the same reason as the
+    // rest of this class.
+    build: () =>
+      /[\w.-]{0,50}?mailgun(?:[ \t\w.-]{0,20})[\s'"]{0,3}(?:=|>|:{1,3}=|\|\||:|=>|\?=|,)[`'"\s=]{0,5}([a-h0-9]{32}-[a-h0-9]{8}-[a-h0-9]{8})(?:[`'"\s;]|\\[nr]|$)/gi,
+    confidence: "generic",
+  },
+  {
+    id: "mapbox-api-token",
+    description: "MapBox API Token (contextual)",
+    // Same keyword-proximity shape. Value has a fixed "pk." prefix, a
+    // 60-char alnum segment, a ".", and a 22-char alnum segment, all
+    // inside one capture group, gated on "mapbox" appearing before the
+    // assignment. "generic" tier for the same reason as the rest of this
+    // class.
+    build: () =>
+      /[\w.-]{0,50}?mapbox(?:[ \t\w.-]{0,20})[\s'"]{0,3}(?:=|>|:{1,3}=|\|\||:|=>|\?=|,)[`'"\s=]{0,5}(pk\.[a-z0-9]{60}\.[a-z0-9]{22})(?:[`'"\s;]|\\[nr]|$)/gi,
+    confidence: "generic",
+  },
+  {
+    id: "messagebird-api-token",
+    description: "MessageBird API Token (contextual)",
+    // Same keyword-proximity shape. Value is a bare 25-char lowercase-alnum
+    // value, gated on "messagebird"/"message_bird"/"message-bird"
+    // (optional separator, still a flat pattern) appearing before the
+    // assignment. "generic" tier for the same reason as the rest of this
+    // class.
+    build: () =>
+      /[\w.-]{0,50}?message[_-]?bird(?:[ \t\w.-]{0,20})[\s'"]{0,3}(?:=|>|:{1,3}=|\|\||:|=>|\?=|,)[`'"\s=]{0,5}([a-z0-9]{25})(?:[`'"\s;]|\\[nr]|$)/gi,
+    confidence: "generic",
+  },
+  {
+    id: "messagebird-client-id",
+    description: "MessageBird Client ID (contextual)",
+    // Same keyword-proximity shape and keyword gate as
+    // messagebird-api-token. Value is UUID-shaped (hyphens preserved in
+    // the capture group, same convention as this codebase's other
+    // UUID-shaped rules). "generic" tier for the same reason as the rest
+    // of this class.
+    build: () =>
+      /[\w.-]{0,50}?message[_-]?bird(?:[ \t\w.-]{0,20})[\s'"]{0,3}(?:=|>|:{1,3}=|\|\||:|=>|\?=|,)[`'"\s=]{0,5}([0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})(?:[`'"\s;]|\\[nr]|$)/gi,
+    confidence: "generic",
+  },
+  {
+    id: "netlify-access-token",
+    description: "Netlify Access Token (contextual)",
+    // Same keyword-proximity shape. Value is a 40-46-char range
+    // alnum/"="/"_"/"-" value, gated on "netlify" appearing before the
+    // assignment. "generic" tier for the same reason as the rest of this
+    // class.
+    build: () =>
+      /[\w.-]{0,50}?netlify(?:[ \t\w.-]{0,20})[\s'"]{0,3}(?:=|>|:{1,3}=|\|\||:|=>|\?=|,)[`'"\s=]{0,5}([a-z0-9=_-]{40,46})(?:[`'"\s;]|\\[nr]|$)/gi,
+    confidence: "generic",
+  },
 ];
 
 /**

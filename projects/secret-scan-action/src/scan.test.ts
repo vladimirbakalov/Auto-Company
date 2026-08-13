@@ -1532,6 +1532,204 @@ describe("scanLine — true positives (known-leaked-secret patterns)", () => {
     expect(findings.some((f) => f.ruleId === "defined-networking-api-token")).toBe(false);
   });
 
+  it("flags a Lob API Key-shaped value when the keyword 'lob' is nearby", () => {
+    const value = "live_" + "ab3fd1".repeat(6).slice(0, 35);
+    const findings = scanLine(line(`const lob_api_key = "${value}";`));
+    expect(findings.some((f) => f.ruleId === "lob-api-key" && f.confidence === "generic")).toBe(true);
+  });
+
+  it("does not flag a value shaped like a Lob API Key without the keyword nearby", () => {
+    const value = "live_" + "ab3fd1".repeat(6).slice(0, 35);
+    const findings = scanLine(line(`const unrelated_var = "${value}";`));
+    expect(findings.some((f) => f.ruleId === "lob-api-key")).toBe(false);
+  });
+
+  it("does not flag a Lob API Key-shaped value that is one character short even with the keyword nearby", () => {
+    const value = "live_" + "ab3fd1".repeat(6).slice(0, 34);
+    const findings = scanLine(line(`const lob_api_key = "${value}";`));
+    expect(findings.some((f) => f.ruleId === "lob-api-key")).toBe(false);
+  });
+
+  it("flags a Lob Publishable API Key-shaped value when the keyword 'lob' is nearby", () => {
+    const value = "test_pub_" + "ab3fd1".repeat(6).slice(0, 31);
+    const findings = scanLine(line(`const lob_pub_api_key = "${value}";`));
+    expect(findings.some((f) => f.ruleId === "lob-pub-api-key" && f.confidence === "generic")).toBe(true);
+  });
+
+  it("does not flag a value shaped like a Lob Publishable API Key without the keyword nearby", () => {
+    const value = "test_pub_" + "ab3fd1".repeat(6).slice(0, 31);
+    const findings = scanLine(line(`const unrelated_var = "${value}";`));
+    expect(findings.some((f) => f.ruleId === "lob-pub-api-key")).toBe(false);
+  });
+
+  it("does not flag a Lob Publishable API Key-shaped value that is one character short even with the keyword nearby", () => {
+    const value = "test_pub_" + "ab3fd1".repeat(6).slice(0, 30);
+    const findings = scanLine(line(`const lob_pub_api_key = "${value}";`));
+    expect(findings.some((f) => f.ruleId === "lob-pub-api-key")).toBe(false);
+  });
+
+  it("flags a Looker Client ID-shaped value when the keyword 'looker' is nearby", () => {
+    const value = "aB3fD1x9Qz".repeat(2).slice(0, 20).toLowerCase();
+    const findings = scanLine(line(`const looker_client_id = "${value}";`));
+    expect(findings.some((f) => f.ruleId === "looker-client-id" && f.confidence === "generic")).toBe(true);
+  });
+
+  it("does not flag a value shaped like a Looker Client ID without the keyword nearby", () => {
+    const value = "aB3fD1x9Qz".repeat(2).slice(0, 20).toLowerCase();
+    const findings = scanLine(line(`const unrelated_var = "${value}";`));
+    expect(findings.some((f) => f.ruleId === "looker-client-id")).toBe(false);
+  });
+
+  it("does not flag a Looker Client ID-shaped value that is one character short even with the keyword nearby", () => {
+    const value = "aB3fD1x9Qz".repeat(2).slice(0, 19).toLowerCase();
+    const findings = scanLine(line(`const looker_client_id = "${value}";`));
+    expect(findings.some((f) => f.ruleId === "looker-client-id")).toBe(false);
+  });
+
+  it("flags a Looker Client Secret-shaped value when the keyword 'looker' is nearby", () => {
+    const value = "aB3fD1x9Qz".repeat(3).slice(0, 24).toLowerCase();
+    const findings = scanLine(line(`const looker_client_secret = "${value}";`));
+    expect(findings.some((f) => f.ruleId === "looker-client-secret" && f.confidence === "generic")).toBe(true);
+  });
+
+  it("does not flag a value shaped like a Looker Client Secret without the keyword nearby", () => {
+    const value = "aB3fD1x9Qz".repeat(3).slice(0, 24).toLowerCase();
+    const findings = scanLine(line(`const unrelated_var = "${value}";`));
+    expect(findings.some((f) => f.ruleId === "looker-client-secret")).toBe(false);
+  });
+
+  it("does not flag a Looker Client Secret-shaped value that is one character short even with the keyword nearby", () => {
+    const value = "aB3fD1x9Qz".repeat(3).slice(0, 23).toLowerCase();
+    const findings = scanLine(line(`const looker_client_secret = "${value}";`));
+    expect(findings.some((f) => f.ruleId === "looker-client-secret")).toBe(false);
+  });
+
+  it("flags a Mailgun Private API Token-shaped value when the keyword 'mailgun' is nearby", () => {
+    const value = "key-" + "ab3fd1".repeat(6).slice(0, 32);
+    const findings = scanLine(line(`const mailgun_private_key = "${value}";`));
+    expect(findings.some((f) => f.ruleId === "mailgun-private-api-token" && f.confidence === "generic")).toBe(true);
+  });
+
+  it("does not flag a value shaped like a Mailgun Private API Token without the keyword nearby", () => {
+    const value = "key-" + "ab3fd1".repeat(6).slice(0, 32);
+    const findings = scanLine(line(`const unrelated_var = "${value}";`));
+    expect(findings.some((f) => f.ruleId === "mailgun-private-api-token")).toBe(false);
+  });
+
+  it("does not flag a Mailgun Private API Token-shaped value that is one character short even with the keyword nearby", () => {
+    const value = "key-" + "ab3fd1".repeat(6).slice(0, 31);
+    const findings = scanLine(line(`const mailgun_private_key = "${value}";`));
+    expect(findings.some((f) => f.ruleId === "mailgun-private-api-token")).toBe(false);
+  });
+
+  it("flags a Mailgun Public Validation Key-shaped value when the keyword 'mailgun' is nearby", () => {
+    const value = "pubkey-" + "ab3fd1".repeat(6).slice(0, 32);
+    const findings = scanLine(line(`const mailgun_pub_key = "${value}";`));
+    expect(findings.some((f) => f.ruleId === "mailgun-pub-key" && f.confidence === "generic")).toBe(true);
+  });
+
+  it("does not flag a value shaped like a Mailgun Public Validation Key without the keyword nearby", () => {
+    const value = "pubkey-" + "ab3fd1".repeat(6).slice(0, 32);
+    const findings = scanLine(line(`const unrelated_var = "${value}";`));
+    expect(findings.some((f) => f.ruleId === "mailgun-pub-key")).toBe(false);
+  });
+
+  it("does not flag a Mailgun Public Validation Key-shaped value that is one character short even with the keyword nearby", () => {
+    const value = "pubkey-" + "ab3fd1".repeat(6).slice(0, 31);
+    const findings = scanLine(line(`const mailgun_pub_key = "${value}";`));
+    expect(findings.some((f) => f.ruleId === "mailgun-pub-key")).toBe(false);
+  });
+
+  it("flags a Mailgun Webhook Signing Key-shaped value when the keyword 'mailgun' is nearby", () => {
+    const value = "ab3fd1".repeat(6).slice(0, 32) + "-" + "ab3fd1".repeat(2).slice(0, 8) + "-" + "ab3fd1".repeat(2).slice(0, 8);
+    const findings = scanLine(line(`const mailgun_signing_key = "${value}";`));
+    expect(findings.some((f) => f.ruleId === "mailgun-signing-key" && f.confidence === "generic")).toBe(true);
+  });
+
+  it("does not flag a value shaped like a Mailgun Webhook Signing Key without the keyword nearby", () => {
+    const value = "ab3fd1".repeat(6).slice(0, 32) + "-" + "ab3fd1".repeat(2).slice(0, 8) + "-" + "ab3fd1".repeat(2).slice(0, 8);
+    const findings = scanLine(line(`const unrelated_var = "${value}";`));
+    expect(findings.some((f) => f.ruleId === "mailgun-signing-key")).toBe(false);
+  });
+
+  it("does not flag a Mailgun Webhook Signing Key-shaped value that is one character short even with the keyword nearby", () => {
+    const value = "ab3fd1".repeat(6).slice(0, 32) + "-" + "ab3fd1".repeat(2).slice(0, 8) + "-" + "ab3fd1".repeat(2).slice(0, 7);
+    const findings = scanLine(line(`const mailgun_signing_key = "${value}";`));
+    expect(findings.some((f) => f.ruleId === "mailgun-signing-key")).toBe(false);
+  });
+
+  it("flags a MapBox API Token-shaped value when the keyword 'mapbox' is nearby", () => {
+    const value = "pk." + "aB3fD1x9Qz".repeat(6).slice(0, 60).toLowerCase() + "." + "aB3fD1x9Qz".repeat(3).slice(0, 22).toLowerCase();
+    const findings = scanLine(line(`const mapbox_api_token = "${value}";`));
+    expect(findings.some((f) => f.ruleId === "mapbox-api-token" && f.confidence === "generic")).toBe(true);
+  });
+
+  it("does not flag a value shaped like a MapBox API Token without the keyword nearby", () => {
+    const value = "pk." + "aB3fD1x9Qz".repeat(6).slice(0, 60).toLowerCase() + "." + "aB3fD1x9Qz".repeat(3).slice(0, 22).toLowerCase();
+    const findings = scanLine(line(`const unrelated_var = "${value}";`));
+    expect(findings.some((f) => f.ruleId === "mapbox-api-token")).toBe(false);
+  });
+
+  it("does not flag a MapBox API Token-shaped value that is one character short even with the keyword nearby", () => {
+    const value = "pk." + "aB3fD1x9Qz".repeat(6).slice(0, 60).toLowerCase() + "." + "aB3fD1x9Qz".repeat(3).slice(0, 21).toLowerCase();
+    const findings = scanLine(line(`const mapbox_api_token = "${value}";`));
+    expect(findings.some((f) => f.ruleId === "mapbox-api-token")).toBe(false);
+  });
+
+  it("flags a MessageBird API Token-shaped value when the keyword 'messagebird' is nearby", () => {
+    const value = "aB3fD1x9Qz".repeat(3).slice(0, 25).toLowerCase();
+    const findings = scanLine(line(`const messagebird_api_token = "${value}";`));
+    expect(findings.some((f) => f.ruleId === "messagebird-api-token" && f.confidence === "generic")).toBe(true);
+  });
+
+  it("does not flag a value shaped like a MessageBird API Token without the keyword nearby", () => {
+    const value = "aB3fD1x9Qz".repeat(3).slice(0, 25).toLowerCase();
+    const findings = scanLine(line(`const unrelated_var = "${value}";`));
+    expect(findings.some((f) => f.ruleId === "messagebird-api-token")).toBe(false);
+  });
+
+  it("does not flag a MessageBird API Token-shaped value that is one character short even with the keyword nearby", () => {
+    const value = "aB3fD1x9Qz".repeat(3).slice(0, 24).toLowerCase();
+    const findings = scanLine(line(`const messagebird_api_token = "${value}";`));
+    expect(findings.some((f) => f.ruleId === "messagebird-api-token")).toBe(false);
+  });
+
+  it("flags a MessageBird Client ID-shaped value when the keyword 'messagebird' is nearby", () => {
+    const value = "a1b2c3d4-e5f6-a1b2-c3d4-e5f6a1b2c3d4";
+    const findings = scanLine(line(`const messagebird_client_id = "${value}";`));
+    expect(findings.some((f) => f.ruleId === "messagebird-client-id" && f.confidence === "generic")).toBe(true);
+  });
+
+  it("does not flag a value shaped like a MessageBird Client ID without the keyword nearby", () => {
+    const value = "a1b2c3d4-e5f6-a1b2-c3d4-e5f6a1b2c3d4";
+    const findings = scanLine(line(`const unrelated_var = "${value}";`));
+    expect(findings.some((f) => f.ruleId === "messagebird-client-id")).toBe(false);
+  });
+
+  it("does not flag a MessageBird Client ID-shaped value that is one character short even with the keyword nearby", () => {
+    const value = "a1b2c3d4-e5f6-a1b2-c3d4-e5f6a1b2c3d";
+    const findings = scanLine(line(`const messagebird_client_id = "${value}";`));
+    expect(findings.some((f) => f.ruleId === "messagebird-client-id")).toBe(false);
+  });
+
+  it("flags a Netlify Access Token-shaped value when the keyword 'netlify' is nearby", () => {
+    const value = "aB3fD1x9Qz".repeat(4).slice(0, 40).toLowerCase();
+    const findings = scanLine(line(`const netlify_access_token = "${value}";`));
+    expect(findings.some((f) => f.ruleId === "netlify-access-token" && f.confidence === "generic")).toBe(true);
+  });
+
+  it("does not flag a value shaped like a Netlify Access Token without the keyword nearby", () => {
+    const value = "aB3fD1x9Qz".repeat(4).slice(0, 40).toLowerCase();
+    const findings = scanLine(line(`const unrelated_var = "${value}";`));
+    expect(findings.some((f) => f.ruleId === "netlify-access-token")).toBe(false);
+  });
+
+  it("does not flag a Netlify Access Token-shaped value that is one character short even with the keyword nearby", () => {
+    const value = "aB3fD1x9Qz".repeat(4).slice(0, 39).toLowerCase();
+    const findings = scanLine(line(`const netlify_access_token = "${value}";`));
+    expect(findings.some((f) => f.ruleId === "netlify-access-token")).toBe(false);
+  });
+
   it("flags a generic high-entropy value assigned to a secret-like variable name", () => {
     const findings = scanLine(line(`const apiToken = "zT9pQ2xR7mK4vL8nW1sD6fH3jC0bA5eY";`));
     expect(findings.some((f) => f.ruleId === "generic-high-entropy-secret" && f.confidence === "generic")).toBe(
