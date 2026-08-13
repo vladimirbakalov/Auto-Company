@@ -188,6 +188,23 @@ describe('snapog routes', () => {
     expect(res.headers.get('content-type')).toContain('text/html');
   });
 
+  it('GET / sets a nonce-based CSP header matching the inline script tag', async () => {
+    // CSP is nonce-based (script-src has no 'unsafe-inline') since the page
+    // ships its interactivity as an inline <script>: the header's nonce must
+    // match the one on the tag, or the copy-to-clipboard button silently
+    // breaks. Also guards against a future regression back to no CSP at all
+    // (finding #5 of docs/qa/snapog-security-audit-cycle121.md).
+    const res = await app.request('/', {}, env);
+    const csp = res.headers.get('Content-Security-Policy');
+    expect(csp).toContain("script-src 'self' 'nonce-");
+    expect(csp).toContain("default-src 'self'");
+    const nonce = csp?.match(/'nonce-([^']+)'/)?.[1];
+    expect(nonce).toBeTruthy();
+    const html = await res.text();
+    expect(html).toContain(`<script nonce="${nonce}">`);
+    expect(res.headers.get('Referrer-Policy')).toBe('strict-origin-when-cross-origin');
+  });
+
   it('unknown route returns 404', async () => {
     const res = await app.request('/does-not-exist', {}, env);
     expect(res.status).toBe(404);
@@ -210,6 +227,20 @@ describe('snapog routes', () => {
       const stored = [...db.apiKeys.values()].find(k => k.key_hash === hash);
       expect(stored?.tier).toBe('free');
       expect(stored?.monthly_limit).toBe(100);
+    });
+
+    it('the key-created page also carries a nonce-based CSP matching its inline script', async () => {
+      const res = await app.request(
+        '/register',
+        { method: 'POST', body: new URLSearchParams({ email: 'dev@example.com', keyname: 'ci', tier: 'free' }) },
+        env
+      );
+      expect(res.status).toBe(200);
+      const csp = res.headers.get('Content-Security-Policy');
+      const nonce = csp?.match(/'nonce-([^']+)'/)?.[1];
+      expect(nonce).toBeTruthy();
+      const html = await res.text();
+      expect(html).toContain(`<script nonce="${nonce}">`);
     });
 
     it('falls back to the free tier for an invalid tier value', async () => {
@@ -258,7 +289,7 @@ describe('snapog routes', () => {
       // directly so this doesn't depend on the /register regex's current
       // strictness.
       const { keyCreatedPage } = await import('../src/dashboard/pages');
-      const html = keyCreatedPage('sk_deadbeef', '"><img src=x onerror=alert(1)>@evil.com', 'free');
+      const html = keyCreatedPage('sk_deadbeef', '"><img src=x onerror=alert(1)>@evil.com', 'free', 'test-nonce');
       expect(html).not.toContain('<img src=x onerror=alert(1)>');
       expect(html).toContain('&lt;img src=x onerror=alert(1)&gt;');
     });

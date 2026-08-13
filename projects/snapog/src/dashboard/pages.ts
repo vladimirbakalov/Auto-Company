@@ -389,7 +389,7 @@ function footer(): string {
   </footer>`;
 }
 
-export function landingPage(rawHost: string): string {
+export function landingPage(rawHost: string, nonce: string): string {
   // rawHost comes from the incoming request's URL (ultimately the Host
   // header) — not guaranteed to be the canonical domain, so treat it as
   // untrusted input and escape it before interpolating into HTML, same as
@@ -588,7 +588,7 @@ export function landingPage(rawHost: string): string {
 
   ${footer()}
 
-  <script>
+  <script nonce="${nonce}">
     // Copy to clipboard helper
     document.querySelectorAll('[data-copy]').forEach(btn => {
       btn.addEventListener('click', () => {
@@ -643,7 +643,7 @@ export function registerPage(error?: string, tier?: string): string {
   return layout('Get API Key', body);
 }
 
-export function keyCreatedPage(rawKey: string, email: string, tier: string): string {
+export function keyCreatedPage(rawKey: string, email: string, tier: string, nonce: string): string {
   const body = `
   ${nav()}
   <section class="section">
@@ -689,7 +689,7 @@ export function keyCreatedPage(rawKey: string, email: string, tier: string): str
     </div>
   </section>
   ${footer()}
-  <script>
+  <script nonce="${nonce}">
     document.querySelectorAll('[data-copy]').forEach(btn => {
       btn.addEventListener('click', () => {
         navigator.clipboard.writeText(btn.dataset.copy || '');

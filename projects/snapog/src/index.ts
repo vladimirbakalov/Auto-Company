@@ -33,10 +33,21 @@ function generateRawKey(): string {
   return 'sk_' + Array.from(bytes).map(b => b.toString(16).padStart(2, '0')).join('');
 }
 
-function htmlResponse(html: string, status = 200): Response {
-  return new Response(html, {
+// CSP is nonce-based rather than 'unsafe-inline' on script-src: every page
+// here ships its JS as an inline <script> block (no framework, no bundler),
+// so a blanket 'unsafe-inline' would allow any injected <script> too and
+// defeat the point. A fresh nonce per response lets the legitimate inline
+// block run while blocking anything an attacker manages to inject. Pages
+// with no inline script just ignore the nonce their builder receives.
+function htmlResponseWithNonce(build: (nonce: string) => string, status = 200): Response {
+  const nonce = crypto.randomUUID();
+  return new Response(build(nonce), {
     status,
-    headers: { 'Content-Type': 'text/html; charset=utf-8' },
+    headers: {
+      'Content-Type': 'text/html; charset=utf-8',
+      'Content-Security-Policy': `default-src 'self'; script-src 'self' 'nonce-${nonce}'; style-src 'self' 'unsafe-inline'; img-src 'self' data:; connect-src 'self'; base-uri 'none'; frame-ancestors 'none'`,
+      'Referrer-Policy': 'strict-origin-when-cross-origin',
+    },
   });
 }
 
@@ -116,7 +127,7 @@ async function recordUsageEvent(
 // Landing page
 app.get('/', c => {
   const host = new URL(c.req.url).host;
-  return htmlResponse(landingPage(host));
+  return htmlResponseWithNonce(nonce => landingPage(host, nonce));
 });
 
 // ── OG image generation ────────────────────────────────────────────────────────
@@ -226,7 +237,7 @@ app.get('/og', async c => {
 // ── Registration ──────────────────────────────────────────────────────────────
 app.get('/register', c => {
   const tier = c.req.query('tier');
-  return htmlResponse(registerPage(undefined, tier));
+  return htmlResponseWithNonce(() => registerPage(undefined, tier));
 });
 
 app.post('/register', async c => {
@@ -237,7 +248,7 @@ app.post('/register', async c => {
     keyname = (form.get('keyname') as string ?? '').trim() || 'default';
     tier = (form.get('tier') as string ?? 'free').trim();
   } catch {
-    return htmlResponse(registerPage('Invalid form data'), 400);
+    return htmlResponseWithNonce(() => registerPage('Invalid form data'), 400);
   }
 
   // Excludes HTML metacharacters in addition to whitespace/@ — defense in
@@ -245,7 +256,7 @@ app.post('/register', async c => {
   // since the original pattern happily accepted a local-part like
   // `<script>alert(1)</script>` as a "valid" email.
   if (!email || !/^[^\s@<>"'&]+@[^\s@<>"'&]+\.[^\s@<>"'&]+$/.test(email)) {
-    return htmlResponse(registerPage('Please enter a valid email address', tier), 400);
+    return htmlResponseWithNonce(() => registerPage('Please enter a valid email address', tier), 400);
   }
 
   const validTiers: Tier[] = ['free', 'pro', 'business'];
@@ -265,7 +276,7 @@ app.post('/register', async c => {
     .bind(email)
     .first<{ id: string }>();
   if (!user) {
-    return htmlResponse(registerPage('Database error — please try again'), 500);
+    return htmlResponseWithNonce(() => registerPage('Database error — please try again'), 500);
   }
 
   // Generate API key
@@ -285,19 +296,19 @@ app.post('/register', async c => {
     .bind(keyId, user.id, keyname, keyPrefix, keyHash, safeTier, monthlyLimit, resetAt)
     .run();
 
-  return htmlResponse(keyCreatedPage(rawKey, email, safeTier));
+  return htmlResponseWithNonce(nonce => keyCreatedPage(rawKey, email, safeTier, nonce));
 });
 
 // ── Dashboard ─────────────────────────────────────────────────────────────────
 app.get('/dashboard', async c => {
   const rawKey = c.req.query('key');
   if (!rawKey) {
-    return htmlResponse(registerPage('Enter your API key or create a new one below'), 400);
+    return htmlResponseWithNonce(() => registerPage('Enter your API key or create a new one below'), 400);
   }
 
   const apiKey = await resolveApiKey(c.env.DB, rawKey);
   if (!apiKey) {
-    return htmlResponse(errorPage(404, 'API key not found'), 404);
+    return htmlResponseWithNonce(() => errorPage(404, 'API key not found'), 404);
   }
 
   const refreshed = await maybeResetUsage(c.env.DB, apiKey);
@@ -311,17 +322,17 @@ app.get('/dashboard', async c => {
     .bind(refreshed.id, yesterday)
     .first<{ cnt: number }>();
 
-  return htmlResponse(dashboardPage(refreshed, recent?.cnt ?? 0));
+  return htmlResponseWithNonce(() => dashboardPage(refreshed, recent?.cnt ?? 0));
 });
 
 // ── Health / ops ──────────────────────────────────────────────────────────────
 app.get('/health', c => c.json({ ok: true, ts: new Date().toISOString() }));
 
 // 404 fallback
-app.notFound(_c => htmlResponse(errorPage(404, 'Page not found'), 404));
+app.notFound(_c => htmlResponseWithNonce(() => errorPage(404, 'Page not found'), 404));
 app.onError((err, _c) => {
   console.error('Unhandled error:', err);
-  return htmlResponse(errorPage(500, 'Internal server error'), 500);
+  return htmlResponseWithNonce(() => errorPage(500, 'Internal server error'), 500);
 });
 
 export default app;
