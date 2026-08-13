@@ -1,7 +1,6 @@
 // SnapOG — OG image renderer
 // Uses workers-og (Satori + resvg-wasm, CF Workers compatible)
 
-import { ImageResponse } from 'workers-og';
 import { buildElement } from './templates';
 import type { OGParams } from '../types';
 
@@ -14,6 +13,12 @@ export async function generateOGImage(
 ): Promise<Response> {
   const element = buildElement(params, watermark);
 
+  // Lazy-imported: workers-og pulls in a WASM binary that only resolves
+  // under the Workers runtime (or a bundler that inlines it), not plain
+  // Node — keeping it out of this module's top-level import lets
+  // buildCacheKey below be imported/tested in isolation (e.g. plain
+  // vitest) without dragging the renderer's WASM dependency along.
+  const { ImageResponse } = await import('workers-og');
   const response = new ImageResponse(element, {
     width: OG_WIDTH,
     height: OG_HEIGHT,

@@ -1,0 +1,343 @@
+// Route-level tests via Hono's app.request() (no server needed). Mirrors
+// vibecheck's test/index.test.ts pattern: prepare(sql) branches on the SQL
+// text against a small in-memory D1/R2 stand-in rather than mocking the
+// Cloudflare SDK. generateOGImage is mocked out (workers-og needs the
+// Workers/WASM runtime, which plain vitest doesn't provide) — buildCacheKey
+// and buildElement, the two pure pieces it depends on, are covered directly
+// in render.test.ts / templates.test.ts.
+
+import { describe, it, expect, vi, beforeEach } from 'vitest';
+import type { Env, ApiKey, Tier } from '../src/types';
+
+// vi.mock's factory is hoisted above all imports/const declarations, so the
+// mock fn itself must be created via vi.hoisted() to be visible inside it.
+const { generateOGImageMock } = vi.hoisted(() => ({
+  generateOGImageMock: vi.fn(async (_params: unknown, _watermark: boolean) => {
+    return new Response(new Uint8Array([1, 2, 3]).buffer);
+  }),
+}));
+
+vi.mock('../src/og/render', async importOriginal => {
+  const actual = await importOriginal<typeof import('../src/og/render')>();
+  return { ...actual, generateOGImage: generateOGImageMock };
+});
+
+// Static import after vi.mock — Vitest hoists vi.mock calls above imports,
+// so `app` below already resolves against the mocked render module.
+import app from '../src/index';
+
+function fakeExecutionContext(): ExecutionContext {
+  return { waitUntil: () => {}, passThroughOnException: () => {}, props: {} } as unknown as ExecutionContext;
+}
+
+interface ApiKeyRow extends ApiKey {}
+
+// Minimal, stateful in-memory stand-in for the D1 surface src/index.ts
+// actually uses — real upsert/increment semantics, not canned responses,
+// since usage-limit and month-rollover behavior depends on state mutating
+// across calls within a single test.
+class FakeD1 {
+  usersByEmail = new Map<string, { id: string; email: string }>();
+  apiKeys = new Map<string, ApiKeyRow>();
+  usageEvents: Array<{ id: string; api_key_id: string; template: string; cache_hit: number; generated_at: string }> = [];
+
+  prepare(sql: string) {
+    const self = this;
+    return {
+      bind(...args: unknown[]) {
+        return {
+          async first<T>(): Promise<T | null> {
+            if (sql.includes('SELECT * FROM api_keys WHERE key_hash')) {
+              const hash = args[0] as string;
+              const row = [...self.apiKeys.values()].find(k => k.key_hash === hash);
+              return (row ?? null) as unknown as T;
+            }
+            if (sql.includes('SELECT id FROM users WHERE email')) {
+              const email = args[0] as string;
+              const u = self.usersByEmail.get(email);
+              return (u ? { id: u.id } : null) as unknown as T;
+            }
+            if (sql.includes('SELECT COUNT(*) as cnt FROM usage_events')) {
+              const [apiKeyId, since] = args as [string, string];
+              const cnt = self.usageEvents.filter(
+                e => e.api_key_id === apiKeyId && e.generated_at > since
+              ).length;
+              return { cnt } as unknown as T;
+            }
+            return null;
+          },
+          async run() {
+            if (sql.includes('INSERT INTO users')) {
+              const [id, email] = args as [string, string];
+              if (!self.usersByEmail.has(email)) self.usersByEmail.set(email, { id, email });
+            } else if (sql.includes('INSERT INTO api_keys')) {
+              const [id, user_id, name, key_prefix, key_hash, tier, monthly_limit, usage_reset_at] =
+                args as [string, string, string, string, string, Tier, number, string];
+              self.apiKeys.set(id, {
+                id,
+                user_id,
+                name,
+                key_prefix,
+                key_hash,
+                tier,
+                monthly_limit,
+                usage_count: 0,
+                usage_reset_at,
+                created_at: new Date().toISOString(),
+              });
+            } else if (sql.includes('UPDATE api_keys SET usage_count = 0')) {
+              const [newResetAt, id] = args as [string, string];
+              const k = self.apiKeys.get(id);
+              if (k) {
+                k.usage_count = 0;
+                k.usage_reset_at = newResetAt;
+              }
+            } else if (sql.includes('UPDATE api_keys SET usage_count = usage_count + 1')) {
+              const [id] = args as [string];
+              const k = self.apiKeys.get(id);
+              if (k) k.usage_count += 1;
+            } else if (sql.includes('INSERT INTO usage_events')) {
+              const [id, api_key_id, template, cache_hit] = args as [string, string, string, number];
+              self.usageEvents.push({
+                id,
+                api_key_id,
+                template,
+                cache_hit,
+                generated_at: new Date().toISOString(),
+              });
+            }
+            return { success: true };
+          },
+        };
+      },
+    };
+  }
+
+  async batch(statements: Array<{ run: () => Promise<unknown> }>) {
+    const results = [];
+    for (const stmt of statements) results.push(await stmt.run());
+    return results;
+  }
+}
+
+function fakeR2(): R2Bucket {
+  const store = new Map<string, ArrayBuffer>();
+  return {
+    get: async (key: string) => {
+      const data = store.get(key);
+      if (!data) return null;
+      return { arrayBuffer: async () => data } as unknown as R2ObjectBody;
+    },
+    put: async (key: string, value: ArrayBuffer) => {
+      store.set(key, value);
+    },
+  } as unknown as R2Bucket;
+}
+
+async function sha256(text: string): Promise<string> {
+  const buf = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(text));
+  return Array.from(new Uint8Array(buf)).map(b => b.toString(16).padStart(2, '0')).join('');
+}
+
+describe('snapog routes', () => {
+  let db: FakeD1;
+  let env: Env;
+
+  beforeEach(() => {
+    db = new FakeD1();
+    env = { DB: db as unknown as Env['DB'], ENVIRONMENT: 'test' } as Env;
+    generateOGImageMock.mockClear();
+  });
+
+  async function registerKey(tier: Tier = 'free'): Promise<string> {
+    const res = await app.request(
+      '/register',
+      {
+        method: 'POST',
+        body: new URLSearchParams({ email: 'dev@example.com', keyname: 'ci', tier }),
+      },
+      env
+    );
+    expect(res.status).toBe(200);
+    const html = await res.text();
+    const match = html.match(/sk_[0-9a-f]{64}/);
+    if (!match) throw new Error('no API key found in register response HTML');
+    return match[0];
+  }
+
+  it('GET /health returns ok', async () => {
+    const res = await app.request('/health', {}, env);
+    expect(res.status).toBe(200);
+    const body = await res.json();
+    expect(body).toMatchObject({ ok: true });
+  });
+
+  it('GET / returns the landing page', async () => {
+    const res = await app.request('/', {}, env);
+    expect(res.status).toBe(200);
+    expect(res.headers.get('content-type')).toContain('text/html');
+  });
+
+  it('unknown route returns 404', async () => {
+    const res = await app.request('/does-not-exist', {}, env);
+    expect(res.status).toBe(404);
+  });
+
+  describe('POST /register', () => {
+    it('rejects an invalid email', async () => {
+      const res = await app.request(
+        '/register',
+        { method: 'POST', body: new URLSearchParams({ email: 'not-an-email' }) },
+        env
+      );
+      expect(res.status).toBe(400);
+    });
+
+    it('creates a user + API key on valid submission', async () => {
+      const rawKey = await registerKey('free');
+      expect(rawKey).toMatch(/^sk_[0-9a-f]{64}$/);
+      const hash = await sha256(rawKey);
+      const stored = [...db.apiKeys.values()].find(k => k.key_hash === hash);
+      expect(stored?.tier).toBe('free');
+      expect(stored?.monthly_limit).toBe(100);
+    });
+
+    it('falls back to the free tier for an invalid tier value', async () => {
+      const res = await app.request(
+        '/register',
+        { method: 'POST', body: new URLSearchParams({ email: 'x@example.com', tier: 'enterprise' }) },
+        env
+      );
+      expect(res.status).toBe(200);
+      const [key] = [...db.apiKeys.values()];
+      expect(key.tier).toBe('free');
+    });
+
+    it('reuses the existing user on a duplicate email (upsert, not duplicate insert)', async () => {
+      await app.request(
+        '/register',
+        { method: 'POST', body: new URLSearchParams({ email: 'dup@example.com', keyname: 'one' }) },
+        env
+      );
+      await app.request(
+        '/register',
+        { method: 'POST', body: new URLSearchParams({ email: 'dup@example.com', keyname: 'two' }) },
+        env
+      );
+      expect(db.usersByEmail.size).toBe(1);
+      expect(db.apiKeys.size).toBe(2); // two keys, same user
+    });
+  });
+
+  describe('GET /og', () => {
+    it('requires a title', async () => {
+      const res = await app.request('/og?key=sk_x', {}, env, fakeExecutionContext());
+      expect(res.status).toBe(400);
+    });
+
+    it('requires a key', async () => {
+      const res = await app.request('/og?title=Hello', {}, env, fakeExecutionContext());
+      expect(res.status).toBe(401);
+    });
+
+    it('rejects an invalid key', async () => {
+      const res = await app.request('/og?title=Hello&key=sk_invalid', {}, env, fakeExecutionContext());
+      expect(res.status).toBe(401);
+    });
+
+    it('generates and caches an image on a cold cache (MISS)', async () => {
+      const rawKey = await registerKey('free');
+      env.OG_CACHE = fakeR2();
+
+      const res = await app.request(`/og?title=Hello&key=${rawKey}`, {}, env, fakeExecutionContext());
+
+      expect(res.status).toBe(200);
+      expect(res.headers.get('X-Cache')).toBe('MISS');
+      expect(res.headers.get('Content-Type')).toBe('image/png');
+      expect(generateOGImageMock).toHaveBeenCalledTimes(1);
+      // free tier -> watermark=true
+      expect(generateOGImageMock.mock.calls[0][1]).toBe(true);
+    });
+
+    it('serves from R2 on a warm cache (HIT) without regenerating', async () => {
+      const rawKey = await registerKey('free');
+      env.OG_CACHE = fakeR2();
+
+      await app.request(`/og?title=Hello&key=${rawKey}`, {}, env, fakeExecutionContext());
+      generateOGImageMock.mockClear();
+      const res = await app.request(`/og?title=Hello&key=${rawKey}`, {}, env, fakeExecutionContext());
+
+      expect(res.status).toBe(200);
+      expect(res.headers.get('X-Cache')).toBe('HIT');
+      expect(generateOGImageMock).not.toHaveBeenCalled();
+    });
+
+    it('degrades to always-MISS when OG_CACHE is unbound (e.g. --temporary deploy)', async () => {
+      const rawKey = await registerKey('free');
+      // env.OG_CACHE intentionally left undefined
+
+      const first = await app.request(`/og?title=Hello&key=${rawKey}`, {}, env, fakeExecutionContext());
+      const second = await app.request(`/og?title=Hello&key=${rawKey}`, {}, env, fakeExecutionContext());
+
+      expect(first.headers.get('X-Cache')).toBe('MISS');
+      expect(second.headers.get('X-Cache')).toBe('MISS');
+      expect(generateOGImageMock).toHaveBeenCalledTimes(2);
+    });
+
+    it('omits the watermark for a paid tier', async () => {
+      const rawKey = await registerKey('pro');
+      await app.request(`/og?title=Hello&key=${rawKey}`, {}, env, fakeExecutionContext());
+      expect(generateOGImageMock.mock.calls[0][1]).toBe(false);
+    });
+
+    it('returns 429 once the monthly limit is reached', async () => {
+      const rawKey = await registerKey('free');
+      const hash = await sha256(rawKey);
+      const key = [...db.apiKeys.values()].find(k => k.key_hash === hash)!;
+      key.usage_count = key.monthly_limit; // simulate limit already hit
+
+      const res = await app.request(`/og?title=Hello&key=${rawKey}`, {}, env, fakeExecutionContext());
+      expect(res.status).toBe(429);
+      const body = await res.json();
+      expect(body).toMatchObject({ tier: 'free', limit: 100 });
+    });
+
+    it('resets usage when the billing month has rolled over', async () => {
+      const rawKey = await registerKey('free');
+      const hash = await sha256(rawKey);
+      const key = [...db.apiKeys.values()].find(k => k.key_hash === hash)!;
+      key.usage_count = key.monthly_limit;
+      key.usage_reset_at = '2020-01-01T00:00:00.000Z'; // long-past month
+
+      const res = await app.request(`/og?title=Hello&key=${rawKey}`, {}, env, fakeExecutionContext());
+      expect(res.status).toBe(200); // limit no longer exceeded post-reset
+    });
+
+    it('truncates an overlong title to 120 chars', async () => {
+      const rawKey = await registerKey('free');
+      const longTitle = 'x'.repeat(200);
+      await app.request(`/og?title=${longTitle}&key=${rawKey}`, {}, env, fakeExecutionContext());
+      const paramsArg = generateOGImageMock.mock.calls[0][0] as { title: string };
+      expect(paramsArg.title.length).toBe(120);
+    });
+  });
+
+  describe('GET /dashboard', () => {
+    it('requires a key', async () => {
+      const res = await app.request('/dashboard', {}, env);
+      expect(res.status).toBe(400);
+    });
+
+    it('404s on an unknown key', async () => {
+      const res = await app.request('/dashboard?key=sk_nope', {}, env);
+      expect(res.status).toBe(404);
+    });
+
+    it('renders for a valid key', async () => {
+      const rawKey = await registerKey('free');
+      const res = await app.request(`/dashboard?key=${rawKey}`, {}, env);
+      expect(res.status).toBe(200);
+      expect(res.headers.get('content-type')).toContain('text/html');
+    });
+  });
+});
