@@ -34021,6 +34021,133 @@ exports.PATTERN_RULES = [
         build: () => /[\w.-]{0,50}?(?:BUNDLE_ENTERPRISE__CONTRIBSYS__COM|BUNDLE_GEMS__CONTRIBSYS__COM)(?:[ \t\w.-]{0,20})[\s'"]{0,3}(?:=|>|:{1,3}=|\|\||:|=>|\?=|,)[`'"\s=]{0,5}([a-f0-9]{8}:[a-f0-9]{8})(?:[`'"\s;]|\\[nr]|$)/gi,
         confidence: "generic",
     },
+    {
+        id: "nytimes-access-token",
+        description: "New York Times Access Token (contextual)",
+        // Same keyword-proximity shape. Value is a bare 32-char alnum/"=_-"
+        // body, gated on "nytimes"/"new-york-times,"/"newyorktimes" appearing
+        // before the assignment. The trailing comma in the middle alternative
+        // is a faithful port of an upstream typo, not a mistake introduced
+        // here. "generic" tier for the same reason as the rest of this class.
+        build: () => /[\w.-]{0,50}?(?:nytimes|new-york-times,|newyorktimes)(?:[ \t\w.-]{0,20})[\s'"]{0,3}(?:=|>|:{1,3}=|\|\||:|=>|\?=|,)[`'"\s=]{0,5}([a-z0-9=_\-]{32})(?:[`'"\s;]|\\[nr]|$)/gi,
+        confidence: "generic",
+    },
+    {
+        id: "rapidapi-access-token",
+        description: "RapidAPI Access Token (contextual)",
+        // Same keyword-proximity shape. Value is a bare 50-char alnum/"_-"
+        // body, gated on "rapidapi" appearing before the assignment.
+        // "generic" tier for the same reason as the rest of this class.
+        build: () => /[\w.-]{0,50}?rapidapi(?:[ \t\w.-]{0,20})[\s'"]{0,3}(?:=|>|:{1,3}=|\|\||:|=>|\?=|,)[`'"\s=]{0,5}([a-z0-9_-]{50})(?:[`'"\s;]|\\[nr]|$)/gi,
+        confidence: "generic",
+    },
+    {
+        id: "squarespace-access-token",
+        description: "Squarespace Access Token (contextual)",
+        // Same keyword-proximity shape. Value is UUID-shaped, gated on
+        // "squarespace" appearing before the assignment. "generic" tier for
+        // the same reason as the rest of this class.
+        build: () => /[\w.-]{0,50}?squarespace(?:[ \t\w.-]{0,20})[\s'"]{0,3}(?:=|>|:{1,3}=|\|\||:|=>|\?=|,)[`'"\s=]{0,5}([0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})(?:[`'"\s;]|\\[nr]|$)/gi,
+        confidence: "generic",
+    },
+    {
+        id: "travisci-access-token",
+        description: "Travis CI Access Token (contextual)",
+        // Same keyword-proximity shape. Value is a bare 22-char lowercase-alnum
+        // body, gated on "travis" appearing before the assignment. "generic"
+        // tier for the same reason as the rest of this class.
+        build: () => /[\w.-]{0,50}?travis(?:[ \t\w.-]{0,20})[\s'"]{0,3}(?:=|>|:{1,3}=|\|\||:|=>|\?=|,)[`'"\s=]{0,5}([a-z0-9]{22})(?:[`'"\s;]|\\[nr]|$)/gi,
+        confidence: "generic",
+    },
+    {
+        id: "typeform-api-token",
+        description: "Typeform API Token (contextual)",
+        // Same keyword-proximity shape. Value has a fixed "tfp_" prefix plus a
+        // 59-char alnum/"-_.=" body, gated on "typeform" appearing before the
+        // assignment. "generic" tier for the same reason as the rest of this
+        // class.
+        build: () => /[\w.-]{0,50}?typeform(?:[ \t\w.-]{0,20})[\s'"]{0,3}(?:=|>|:{1,3}=|\|\||:|=>|\?=|,)[`'"\s=]{0,5}(tfp_[a-z0-9\-_.=]{59})(?:[`'"\s;]|\\[nr]|$)/gi,
+        confidence: "generic",
+    },
+    {
+        id: "twitter-access-secret",
+        description: "Twitter Access Secret (contextual)",
+        // Same keyword-proximity shape. Value is a bare 45-char lowercase-alnum
+        // body, gated on "twitter" appearing before the assignment. "generic"
+        // tier for the same reason as the rest of this class.
+        build: () => /[\w.-]{0,50}?twitter(?:[ \t\w.-]{0,20})[\s'"]{0,3}(?:=|>|:{1,3}=|\|\||:|=>|\?=|,)[`'"\s=]{0,5}([a-z0-9]{45})(?:[`'"\s;]|\\[nr]|$)/gi,
+        confidence: "generic",
+    },
+    {
+        id: "twitter-access-token",
+        description: "Twitter Access Token (contextual)",
+        // Same keyword-proximity shape and keyword gate as
+        // twitter-access-secret. Value is 15-25 digits, a hyphen, then
+        // 20-40 mixed-case alnum chars, all inside one capture group.
+        // "generic" tier for the same reason as the rest of this class.
+        build: () => /[\w.-]{0,50}?twitter(?:[ \t\w.-]{0,20})[\s'"]{0,3}(?:=|>|:{1,3}=|\|\||:|=>|\?=|,)[`'"\s=]{0,5}([0-9]{15,25}-[a-zA-Z0-9]{20,40})(?:[`'"\s;]|\\[nr]|$)/gi,
+        confidence: "generic",
+    },
+    {
+        id: "twitter-api-key",
+        description: "Twitter API Key (contextual)",
+        // Same keyword-proximity shape and keyword gate as
+        // twitter-access-secret. Value is a bare 25-char lowercase-alnum
+        // body. "generic" tier for the same reason as the rest of this class.
+        build: () => /[\w.-]{0,50}?twitter(?:[ \t\w.-]{0,20})[\s'"]{0,3}(?:=|>|:{1,3}=|\|\||:|=>|\?=|,)[`'"\s=]{0,5}([a-z0-9]{25})(?:[`'"\s;]|\\[nr]|$)/gi,
+        confidence: "generic",
+    },
+    {
+        id: "twitter-api-secret",
+        description: "Twitter API Secret (contextual)",
+        // Same keyword-proximity shape and keyword gate as
+        // twitter-access-secret. Value is a bare 50-char lowercase-alnum
+        // body. "generic" tier for the same reason as the rest of this class.
+        build: () => /[\w.-]{0,50}?twitter(?:[ \t\w.-]{0,20})[\s'"]{0,3}(?:=|>|:{1,3}=|\|\||:|=>|\?=|,)[`'"\s=]{0,5}([a-z0-9]{50})(?:[`'"\s;]|\\[nr]|$)/gi,
+        confidence: "generic",
+    },
+    {
+        id: "twitter-bearer-token",
+        description: "Twitter Bearer Token (contextual)",
+        // Same keyword-proximity shape and keyword gate as
+        // twitter-access-secret. Value is a fixed run of 22 uppercase "A"
+        // chars (case-insensitively matched, same as the rest of this class)
+        // plus 80-100 mixed alnum/"%" chars, all inside one capture group.
+        // "generic" tier for the same reason as the rest of this class.
+        build: () => /[\w.-]{0,50}?twitter(?:[ \t\w.-]{0,20})[\s'"]{0,3}(?:=|>|:{1,3}=|\|\||:|=>|\?=|,)[`'"\s=]{0,5}(A{22}[a-zA-Z0-9%]{80,100})(?:[`'"\s;]|\\[nr]|$)/gi,
+        confidence: "generic",
+    },
+    {
+        id: "yandex-access-token",
+        description: "Yandex Access Token (contextual)",
+        // Same keyword-proximity shape. Value has a fixed "t1." prefix, a
+        // variable-length segment, a ".", then an 86-char segment with
+        // optional trailing "=" padding, all inside one capture group, gated
+        // on "yandex" appearing before the assignment. "generic" tier for the
+        // same reason as the rest of this class.
+        build: () => /[\w.-]{0,50}?yandex(?:[ \t\w.-]{0,20})[\s'"]{0,3}(?:=|>|:{1,3}=|\|\||:|=>|\?=|,)[`'"\s=]{0,5}(t1\.[A-Z0-9a-z_-]+[=]{0,2}\.[A-Z0-9a-z_-]{86}[=]{0,2})(?:[`'"\s;]|\\[nr]|$)/gi,
+        confidence: "generic",
+    },
+    {
+        id: "yandex-api-key",
+        description: "Yandex API Key (contextual)",
+        // Same keyword-proximity shape and keyword gate as
+        // yandex-access-token. Value has a fixed "AQVN" prefix plus a
+        // 35-38-char alnum/"_-" body. "generic" tier for the same reason as
+        // the rest of this class.
+        build: () => /[\w.-]{0,50}?yandex(?:[ \t\w.-]{0,20})[\s'"]{0,3}(?:=|>|:{1,3}=|\|\||:|=>|\?=|,)[`'"\s=]{0,5}(AQVN[A-Za-z0-9_-]{35,38})(?:[`'"\s;]|\\[nr]|$)/gi,
+        confidence: "generic",
+    },
+    {
+        id: "yandex-aws-access-token",
+        description: "Yandex Cloud AWS-compatible Access Token (contextual)",
+        // Same keyword-proximity shape and keyword gate as
+        // yandex-access-token. Value has a fixed "YC" prefix plus a 38-char
+        // alnum/"_-" body. "generic" tier for the same reason as the rest of
+        // this class.
+        build: () => /[\w.-]{0,50}?yandex(?:[ \t\w.-]{0,20})[\s'"]{0,3}(?:=|>|:{1,3}=|\|\||:|=>|\?=|,)[`'"\s=]{0,5}(YC[a-zA-Z0-9_-]{38})(?:[`'"\s;]|\\[nr]|$)/gi,
+        confidence: "generic",
+    },
 ];
 /**
  * Variable-name fragment that makes a high-entropy value worth flagging.

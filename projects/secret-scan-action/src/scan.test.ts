@@ -1912,6 +1912,240 @@ describe("scanLine — true positives (known-leaked-secret patterns)", () => {
     expect(findings.some((f) => f.ruleId === "sidekiq-secret")).toBe(false);
   });
 
+  it("flags a New York Times Access Token-shaped value when the keyword 'nytimes' is nearby", () => {
+    const value = "ab3fd1".repeat(6).slice(0, 32);
+    const findings = scanLine(line(`const nytimes_access_token = "${value}";`));
+    expect(findings.some((f) => f.ruleId === "nytimes-access-token" && f.confidence === "generic")).toBe(true);
+  });
+
+  it("does not flag a value shaped like a New York Times Access Token without the keyword nearby", () => {
+    const value = "ab3fd1".repeat(6).slice(0, 32);
+    const findings = scanLine(line(`const unrelated_var = "${value}";`));
+    expect(findings.some((f) => f.ruleId === "nytimes-access-token")).toBe(false);
+  });
+
+  it("does not flag a New York Times Access Token-shaped value that is one character short even with the keyword nearby", () => {
+    const value = "ab3fd1".repeat(6).slice(0, 31);
+    const findings = scanLine(line(`const nytimes_access_token = "${value}";`));
+    expect(findings.some((f) => f.ruleId === "nytimes-access-token")).toBe(false);
+  });
+
+  it("flags a RapidAPI Access Token-shaped value when the keyword 'rapidapi' is nearby", () => {
+    const value = "ab3fd1".repeat(9).slice(0, 50);
+    const findings = scanLine(line(`const rapidapi_access_token = "${value}";`));
+    expect(findings.some((f) => f.ruleId === "rapidapi-access-token" && f.confidence === "generic")).toBe(true);
+  });
+
+  it("does not flag a value shaped like a RapidAPI Access Token without the keyword nearby", () => {
+    const value = "ab3fd1".repeat(9).slice(0, 50);
+    const findings = scanLine(line(`const unrelated_var = "${value}";`));
+    expect(findings.some((f) => f.ruleId === "rapidapi-access-token")).toBe(false);
+  });
+
+  it("does not flag a RapidAPI Access Token-shaped value that is one character short even with the keyword nearby", () => {
+    const value = "ab3fd1".repeat(9).slice(0, 49);
+    const findings = scanLine(line(`const rapidapi_access_token = "${value}";`));
+    expect(findings.some((f) => f.ruleId === "rapidapi-access-token")).toBe(false);
+  });
+
+  it("flags a Squarespace Access Token-shaped value when the keyword 'squarespace' is nearby", () => {
+    const value = "a1b2c3d4-e5f6-a1b2-c3d4-e5f6a1b2c3d4";
+    const findings = scanLine(line(`const squarespace_access_token = "${value}";`));
+    expect(findings.some((f) => f.ruleId === "squarespace-access-token" && f.confidence === "generic")).toBe(true);
+  });
+
+  it("does not flag a value shaped like a Squarespace Access Token without the keyword nearby", () => {
+    const value = "a1b2c3d4-e5f6-a1b2-c3d4-e5f6a1b2c3d4";
+    const findings = scanLine(line(`const unrelated_var = "${value}";`));
+    expect(findings.some((f) => f.ruleId === "squarespace-access-token")).toBe(false);
+  });
+
+  it("does not flag a Squarespace Access Token-shaped value that is one character short even with the keyword nearby", () => {
+    const value = "a1b2c3d4-e5f6-a1b2-c3d4-e5f6a1b2c3d";
+    const findings = scanLine(line(`const squarespace_access_token = "${value}";`));
+    expect(findings.some((f) => f.ruleId === "squarespace-access-token")).toBe(false);
+  });
+
+  it("flags a Travis CI Access Token-shaped value when the keyword 'travis' is nearby", () => {
+    const value = "ab3fd1".repeat(4).slice(0, 22);
+    const findings = scanLine(line(`const travis_access_token = "${value}";`));
+    expect(findings.some((f) => f.ruleId === "travisci-access-token" && f.confidence === "generic")).toBe(true);
+  });
+
+  it("does not flag a value shaped like a Travis CI Access Token without the keyword nearby", () => {
+    const value = "ab3fd1".repeat(4).slice(0, 22);
+    const findings = scanLine(line(`const unrelated_var = "${value}";`));
+    expect(findings.some((f) => f.ruleId === "travisci-access-token")).toBe(false);
+  });
+
+  it("does not flag a Travis CI Access Token-shaped value that is one character short even with the keyword nearby", () => {
+    const value = "ab3fd1".repeat(4).slice(0, 21);
+    const findings = scanLine(line(`const travis_access_token = "${value}";`));
+    expect(findings.some((f) => f.ruleId === "travisci-access-token")).toBe(false);
+  });
+
+  it("flags a Typeform API Token-shaped value when the keyword 'typeform' is nearby", () => {
+    const value = "tfp_" + "ab3fd1".repeat(10).slice(0, 59);
+    const findings = scanLine(line(`const typeform_api_token = "${value}";`));
+    expect(findings.some((f) => f.ruleId === "typeform-api-token" && f.confidence === "generic")).toBe(true);
+  });
+
+  it("does not flag a value shaped like a Typeform API Token without the keyword nearby", () => {
+    const value = "tfp_" + "ab3fd1".repeat(10).slice(0, 59);
+    const findings = scanLine(line(`const unrelated_var = "${value}";`));
+    expect(findings.some((f) => f.ruleId === "typeform-api-token")).toBe(false);
+  });
+
+  it("does not flag a Typeform API Token-shaped value that is one character short even with the keyword nearby", () => {
+    const value = "tfp_" + "ab3fd1".repeat(10).slice(0, 58);
+    const findings = scanLine(line(`const typeform_api_token = "${value}";`));
+    expect(findings.some((f) => f.ruleId === "typeform-api-token")).toBe(false);
+  });
+
+  it("flags a Twitter Access Secret-shaped value when the keyword 'twitter' is nearby", () => {
+    const value = "ab3fd1".repeat(8).slice(0, 45);
+    const findings = scanLine(line(`const twitter_access_secret = "${value}";`));
+    expect(findings.some((f) => f.ruleId === "twitter-access-secret" && f.confidence === "generic")).toBe(true);
+  });
+
+  it("does not flag a value shaped like a Twitter Access Secret without the keyword nearby", () => {
+    const value = "ab3fd1".repeat(8).slice(0, 45);
+    const findings = scanLine(line(`const unrelated_var = "${value}";`));
+    expect(findings.some((f) => f.ruleId === "twitter-access-secret")).toBe(false);
+  });
+
+  it("does not flag a Twitter Access Secret-shaped value that is one character short even with the keyword nearby", () => {
+    const value = "ab3fd1".repeat(8).slice(0, 44);
+    const findings = scanLine(line(`const twitter_access_secret = "${value}";`));
+    expect(findings.some((f) => f.ruleId === "twitter-access-secret")).toBe(false);
+  });
+
+  it("flags a Twitter Access Token-shaped value when the keyword 'twitter' is nearby", () => {
+    const value = "1".repeat(18) + "-" + "ab3fd1".repeat(5).slice(0, 30);
+    const findings = scanLine(line(`const twitter_access_token = "${value}";`));
+    expect(findings.some((f) => f.ruleId === "twitter-access-token" && f.confidence === "generic")).toBe(true);
+  });
+
+  it("does not flag a value shaped like a Twitter Access Token without the keyword nearby", () => {
+    const value = "1".repeat(18) + "-" + "ab3fd1".repeat(5).slice(0, 30);
+    const findings = scanLine(line(`const unrelated_var = "${value}";`));
+    expect(findings.some((f) => f.ruleId === "twitter-access-token")).toBe(false);
+  });
+
+  it("does not flag a Twitter Access Token-shaped value that is malformed even with the keyword nearby", () => {
+    const value = "1".repeat(10) + "-" + "ab3fd1".repeat(5).slice(0, 30);
+    const findings = scanLine(line(`const twitter_access_token = "${value}";`));
+    expect(findings.some((f) => f.ruleId === "twitter-access-token")).toBe(false);
+  });
+
+  it("flags a Twitter API Key-shaped value when the keyword 'twitter' is nearby", () => {
+    const value = "ab3fd1".repeat(5).slice(0, 25);
+    const findings = scanLine(line(`const twitter_api_key = "${value}";`));
+    expect(findings.some((f) => f.ruleId === "twitter-api-key" && f.confidence === "generic")).toBe(true);
+  });
+
+  it("does not flag a value shaped like a Twitter API Key without the keyword nearby", () => {
+    const value = "ab3fd1".repeat(5).slice(0, 25);
+    const findings = scanLine(line(`const unrelated_var = "${value}";`));
+    expect(findings.some((f) => f.ruleId === "twitter-api-key")).toBe(false);
+  });
+
+  it("does not flag a Twitter API Key-shaped value that is one character short even with the keyword nearby", () => {
+    const value = "ab3fd1".repeat(5).slice(0, 24);
+    const findings = scanLine(line(`const twitter_api_key = "${value}";`));
+    expect(findings.some((f) => f.ruleId === "twitter-api-key")).toBe(false);
+  });
+
+  it("flags a Twitter API Secret-shaped value when the keyword 'twitter' is nearby", () => {
+    const value = "ab3fd1".repeat(9).slice(0, 50);
+    const findings = scanLine(line(`const twitter_api_secret = "${value}";`));
+    expect(findings.some((f) => f.ruleId === "twitter-api-secret" && f.confidence === "generic")).toBe(true);
+  });
+
+  it("does not flag a value shaped like a Twitter API Secret without the keyword nearby", () => {
+    const value = "ab3fd1".repeat(9).slice(0, 50);
+    const findings = scanLine(line(`const unrelated_var = "${value}";`));
+    expect(findings.some((f) => f.ruleId === "twitter-api-secret")).toBe(false);
+  });
+
+  it("does not flag a Twitter API Secret-shaped value that is one character short even with the keyword nearby", () => {
+    const value = "ab3fd1".repeat(9).slice(0, 49);
+    const findings = scanLine(line(`const twitter_api_secret = "${value}";`));
+    expect(findings.some((f) => f.ruleId === "twitter-api-secret")).toBe(false);
+  });
+
+  it("flags a Twitter Bearer Token-shaped value when the keyword 'twitter' is nearby", () => {
+    const value = "A".repeat(22) + "ab3fd1".repeat(15).slice(0, 90);
+    const findings = scanLine(line(`const twitter_bearer_token = "${value}";`));
+    expect(findings.some((f) => f.ruleId === "twitter-bearer-token" && f.confidence === "generic")).toBe(true);
+  });
+
+  it("does not flag a value shaped like a Twitter Bearer Token without the keyword nearby", () => {
+    const value = "A".repeat(22) + "ab3fd1".repeat(15).slice(0, 90);
+    const findings = scanLine(line(`const unrelated_var = "${value}";`));
+    expect(findings.some((f) => f.ruleId === "twitter-bearer-token")).toBe(false);
+  });
+
+  it("does not flag a Twitter Bearer Token-shaped value that is too short even with the keyword nearby", () => {
+    const value = "A".repeat(22) + "ab3fd1".repeat(14).slice(0, 79);
+    const findings = scanLine(line(`const twitter_bearer_token = "${value}";`));
+    expect(findings.some((f) => f.ruleId === "twitter-bearer-token")).toBe(false);
+  });
+
+  it("flags a Yandex Access Token-shaped value when the keyword 'yandex' is nearby", () => {
+    const value = "t1." + "ab3fD1".repeat(4).slice(0, 20) + "." + "ab3fD1".repeat(15).slice(0, 86);
+    const findings = scanLine(line(`const yandex_access_token = "${value}";`));
+    expect(findings.some((f) => f.ruleId === "yandex-access-token" && f.confidence === "generic")).toBe(true);
+  });
+
+  it("does not flag a value shaped like a Yandex Access Token without the keyword nearby", () => {
+    const value = "t1." + "ab3fD1".repeat(4).slice(0, 20) + "." + "ab3fD1".repeat(15).slice(0, 86);
+    const findings = scanLine(line(`const unrelated_var = "${value}";`));
+    expect(findings.some((f) => f.ruleId === "yandex-access-token")).toBe(false);
+  });
+
+  it("does not flag a Yandex Access Token-shaped value that is one character short even with the keyword nearby", () => {
+    const value = "t1." + "ab3fD1".repeat(4).slice(0, 20) + "." + "ab3fD1".repeat(15).slice(0, 85);
+    const findings = scanLine(line(`const yandex_access_token = "${value}";`));
+    expect(findings.some((f) => f.ruleId === "yandex-access-token")).toBe(false);
+  });
+
+  it("flags a Yandex API Key-shaped value when the keyword 'yandex' is nearby", () => {
+    const value = "AQVN" + "ab3fd1".repeat(7).slice(0, 38);
+    const findings = scanLine(line(`const yandex_api_key = "${value}";`));
+    expect(findings.some((f) => f.ruleId === "yandex-api-key" && f.confidence === "generic")).toBe(true);
+  });
+
+  it("does not flag a value shaped like a Yandex API Key without the keyword nearby", () => {
+    const value = "AQVN" + "ab3fd1".repeat(7).slice(0, 38);
+    const findings = scanLine(line(`const unrelated_var = "${value}";`));
+    expect(findings.some((f) => f.ruleId === "yandex-api-key")).toBe(false);
+  });
+
+  it("does not flag a Yandex API Key-shaped value that is too short even with the keyword nearby", () => {
+    const value = "AQVN" + "ab3fd1".repeat(6).slice(0, 34);
+    const findings = scanLine(line(`const yandex_api_key = "${value}";`));
+    expect(findings.some((f) => f.ruleId === "yandex-api-key")).toBe(false);
+  });
+
+  it("flags a Yandex Cloud AWS-compatible Access Token-shaped value when the keyword 'yandex' is nearby", () => {
+    const value = "YC" + "ab3fd1".repeat(7).slice(0, 38);
+    const findings = scanLine(line(`const yandex_aws_access_token = "${value}";`));
+    expect(findings.some((f) => f.ruleId === "yandex-aws-access-token" && f.confidence === "generic")).toBe(true);
+  });
+
+  it("does not flag a value shaped like a Yandex Cloud AWS-compatible Access Token without the keyword nearby", () => {
+    const value = "YC" + "ab3fd1".repeat(7).slice(0, 38);
+    const findings = scanLine(line(`const unrelated_var = "${value}";`));
+    expect(findings.some((f) => f.ruleId === "yandex-aws-access-token")).toBe(false);
+  });
+
+  it("does not flag a Yandex Cloud AWS-compatible Access Token-shaped value that is one character short even with the keyword nearby", () => {
+    const value = "YC" + "ab3fd1".repeat(7).slice(0, 37);
+    const findings = scanLine(line(`const yandex_aws_access_token = "${value}";`));
+    expect(findings.some((f) => f.ruleId === "yandex-aws-access-token")).toBe(false);
+  });
+
   it("flags a generic high-entropy value assigned to a secret-like variable name", () => {
     const findings = scanLine(line(`const apiToken = "zT9pQ2xR7mK4vL8nW1sD6fH3jC0bA5eY";`));
     expect(findings.some((f) => f.ruleId === "generic-high-entropy-secret" && f.confidence === "generic")).toBe(
