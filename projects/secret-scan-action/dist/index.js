@@ -33419,6 +33419,24 @@ exports.PATTERN_RULES = [
         confidence: "generic",
     },
     {
+        id: "heroku-api-key",
+        description: "Heroku API Key (contextual)",
+        // Same keyword-proximity shape as hubspot-api-key, another UUID-shaped
+        // value. Gated on "heroku" appearing before the assignment. "generic"
+        // tier for the same reason as the rest of this class.
+        build: () => /[\w.-]{0,50}?heroku(?:[ \t\w.-]{0,20})[\s'"]{0,3}(?:=|>|:{1,3}=|\|\||:|=>|\?=|,)[`'"\s=]{0,5}([0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})(?:[`'"\s;]|\\[nr]|$)/gi,
+        confidence: "generic",
+    },
+    {
+        id: "sentry-access-token",
+        description: "Sentry.io Access Token (contextual)",
+        // Same keyword-proximity shape as coinbase-access-token, a bare 64-char
+        // hex value. Gated on "sentry" appearing before the assignment.
+        // "generic" tier for the same reason as the rest of this class.
+        build: () => /[\w.-]{0,50}?sentry(?:[ \t\w.-]{0,20})[\s'"]{0,3}(?:=|>|:{1,3}=|\|\||:|=>|\?=|,)[`'"\s=]{0,5}([a-f0-9]{64})(?:[`'"\s;]|\\[nr]|$)/gi,
+        confidence: "generic",
+    },
+    {
         id: "zendesk-secret-key",
         description: "Zendesk Secret Key (contextual)",
         // Same keyword-proximity shape. Value is a bare 40-char lowercase-alnum

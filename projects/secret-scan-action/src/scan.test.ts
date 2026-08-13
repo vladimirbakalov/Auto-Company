@@ -812,6 +812,42 @@ describe("scanLine — true positives (known-leaked-secret patterns)", () => {
     expect(findings.some((f) => f.ruleId === "hubspot-api-key")).toBe(false);
   });
 
+  it("flags a Heroku-shaped value when the keyword 'heroku' is nearby", () => {
+    const value = "12345678-9abc-def0-1234-56789abcdef0";
+    const findings = scanLine(line(`const heroku_key = "${value}";`));
+    expect(findings.some((f) => f.ruleId === "heroku-api-key" && f.confidence === "generic")).toBe(true);
+  });
+
+  it("does not flag a UUID-shaped value without the 'heroku' keyword nearby", () => {
+    const value = "12345678-9abc-def0-1234-56789abcdef0";
+    const findings = scanLine(line(`const unrelated_var = "${value}";`));
+    expect(findings.some((f) => f.ruleId === "heroku-api-key")).toBe(false);
+  });
+
+  it("does not flag a Heroku-shaped value that is malformed even with the keyword nearby", () => {
+    const value = "12345678-9abc-def0-1234-56789abcdef";
+    const findings = scanLine(line(`const heroku_key = "${value}";`));
+    expect(findings.some((f) => f.ruleId === "heroku-api-key")).toBe(false);
+  });
+
+  it("flags a Sentry-shaped value when the keyword 'sentry' is nearby", () => {
+    const value = "a1b2c3d4e5".repeat(7).slice(0, 64);
+    const findings = scanLine(line(`const sentry_token = "${value}";`));
+    expect(findings.some((f) => f.ruleId === "sentry-access-token" && f.confidence === "generic")).toBe(true);
+  });
+
+  it("does not flag a 64-char hex value shaped like a Sentry token without the keyword nearby", () => {
+    const value = "a1b2c3d4e5".repeat(7).slice(0, 64);
+    const findings = scanLine(line(`const unrelated_var = "${value}";`));
+    expect(findings.some((f) => f.ruleId === "sentry-access-token")).toBe(false);
+  });
+
+  it("does not flag a Sentry-shaped value that is one character short even with the keyword nearby", () => {
+    const value = "a1b2c3d4e5".repeat(7).slice(0, 63);
+    const findings = scanLine(line(`const sentry_token = "${value}";`));
+    expect(findings.some((f) => f.ruleId === "sentry-access-token")).toBe(false);
+  });
+
   it("flags a Zendesk-shaped value when the keyword 'zendesk' is nearby", () => {
     const value = "aB3fD1x9Qz".repeat(4).slice(0, 40).toLowerCase();
     const findings = scanLine(line(`const zendesk_key = "${value}";`));
