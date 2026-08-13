@@ -863,6 +863,173 @@ export const PATTERN_RULES: PatternRule[] = [
       /[\w.-]{0,50}?facebook(?:[ \t\w.-]{0,20})[\s'"]{0,3}(?:=|>|:{1,3}=|\|\||:|=>|\?=|,)[`'"\s=]{0,5}([a-f0-9]{32})(?:[`'"\s;]|\\[nr]|$)/gi,
     confidence: "generic",
   },
+  {
+    id: "gitter-access-token",
+    description: "Gitter Access Token (contextual)",
+    // Same keyword-proximity shape. Value is a bare 40-char lowercase-alnum
+    // (plus "_"/"-") value, gated on "gitter" appearing before the
+    // assignment. "generic" tier for the same reason as the rest of this
+    // class.
+    build: () =>
+      /[\w.-]{0,50}?gitter(?:[ \t\w.-]{0,20})[\s'"]{0,3}(?:=|>|:{1,3}=|\|\||:|=>|\?=|,)[`'"\s=]{0,5}([a-z0-9_-]{40})(?:[`'"\s;]|\\[nr]|$)/gi,
+    confidence: "generic",
+  },
+  {
+    id: "gocardless-api-token",
+    description: "GoCardless API Token (contextual)",
+    // Same keyword-proximity shape. Value has a fixed "live_" prefix plus a
+    // 40-char alnum/"="/"_"/"-" body, gated on "gocardless" appearing before
+    // the assignment. "generic" tier for the same reason as the rest of this
+    // class.
+    build: () =>
+      /[\w.-]{0,50}?gocardless(?:[ \t\w.-]{0,20})[\s'"]{0,3}(?:=|>|:{1,3}=|\|\||:|=>|\?=|,)[`'"\s=]{0,5}(live_[a-z0-9\-_=]{40})(?:[`'"\s;]|\\[nr]|$)/gi,
+    confidence: "generic",
+  },
+  {
+    id: "jfrog-api-key",
+    description: "JFrog API Key (contextual)",
+    // Same keyword-proximity shape. Value is a bare 73-char lowercase-alnum
+    // value, gated on any of "jfrog"/"artifactory"/"bintray"/"xray"
+    // appearing before the assignment (a flat keyword alternation, still a
+    // simple single-capture-group shape). "generic" tier for the same
+    // reason as the rest of this class.
+    build: () =>
+      /[\w.-]{0,50}?(?:jfrog|artifactory|bintray|xray)(?:[ \t\w.-]{0,20})[\s'"]{0,3}(?:=|>|:{1,3}=|\|\||:|=>|\?=|,)[`'"\s=]{0,5}([a-z0-9]{73})(?:[`'"\s;]|\\[nr]|$)/gi,
+    confidence: "generic",
+  },
+  {
+    id: "jfrog-identity-token",
+    description: "JFrog Identity Token (contextual)",
+    // Same keyword-proximity shape and keyword gate as jfrog-api-key. Value
+    // is a bare 64-char lowercase-alnum value (shorter than the API key
+    // shape, distinguishing the two rules). "generic" tier for the same
+    // reason as the rest of this class.
+    build: () =>
+      /[\w.-]{0,50}?(?:jfrog|artifactory|bintray|xray)(?:[ \t\w.-]{0,20})[\s'"]{0,3}(?:=|>|:{1,3}=|\|\||:|=>|\?=|,)[`'"\s=]{0,5}([a-z0-9]{64})(?:[`'"\s;]|\\[nr]|$)/gi,
+    confidence: "generic",
+  },
+  {
+    id: "kraken-access-token",
+    description: "Kraken Access Token (contextual)",
+    // Same keyword-proximity shape. Value is an 80-90-char
+    // alnum/"/"/"="/"_"/"+"/"-" value, gated on "kraken" appearing before
+    // the assignment. "generic" tier for the same reason as the rest of
+    // this class.
+    build: () =>
+      /[\w.-]{0,50}?kraken(?:[ \t\w.-]{0,20})[\s'"]{0,3}(?:=|>|:{1,3}=|\|\||:|=>|\?=|,)[`'"\s=]{0,5}([a-z0-9\/=_+-]{80,90})(?:[`'"\s;]|\\[nr]|$)/gi,
+    confidence: "generic",
+  },
+  {
+    id: "kucoin-access-token",
+    description: "Kucoin Access Token (contextual)",
+    // Same keyword-proximity shape. Value is a bare 24-char hex value,
+    // gated on "kucoin" appearing before the assignment. "generic" tier for
+    // the same reason as the rest of this class.
+    build: () =>
+      /[\w.-]{0,50}?kucoin(?:[ \t\w.-]{0,20})[\s'"]{0,3}(?:=|>|:{1,3}=|\|\||:|=>|\?=|,)[`'"\s=]{0,5}([a-f0-9]{24})(?:[`'"\s;]|\\[nr]|$)/gi,
+    confidence: "generic",
+  },
+  {
+    id: "kucoin-secret-key",
+    description: "Kucoin Secret Key (contextual)",
+    // Same keyword-proximity shape and keyword gate as kucoin-access-token.
+    // Value is UUID-shaped (hyphens preserved in the capture group, same
+    // convention as this codebase's other UUID-shaped rules). "generic"
+    // tier for the same reason as the rest of this class.
+    build: () =>
+      /[\w.-]{0,50}?kucoin(?:[ \t\w.-]{0,20})[\s'"]{0,3}(?:=|>|:{1,3}=|\|\||:|=>|\?=|,)[`'"\s=]{0,5}([0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})(?:[`'"\s;]|\\[nr]|$)/gi,
+    confidence: "generic",
+  },
+  {
+    id: "launchdarkly-access-token",
+    description: "LaunchDarkly Access Token (contextual)",
+    // Same keyword-proximity shape. Value is a bare 40-char
+    // alnum/"="/"_"/"-" value, gated on "launchdarkly" appearing before the
+    // assignment. "generic" tier for the same reason as the rest of this
+    // class.
+    build: () =>
+      /[\w.-]{0,50}?launchdarkly(?:[ \t\w.-]{0,20})[\s'"]{0,3}(?:=|>|:{1,3}=|\|\||:|=>|\?=|,)[`'"\s=]{0,5}([a-z0-9=_-]{40})(?:[`'"\s;]|\\[nr]|$)/gi,
+    confidence: "generic",
+  },
+  {
+    id: "linear-client-secret",
+    description: "Linear Client Secret (contextual)",
+    // Same keyword-proximity shape. Value is a bare 32-char hex value,
+    // gated on "linear" appearing before the assignment. Distinct from the
+    // existing "linear-api-key" rule (different id, different shape).
+    // "generic" tier for the same reason as the rest of this class.
+    build: () =>
+      /[\w.-]{0,50}?linear(?:[ \t\w.-]{0,20})[\s'"]{0,3}(?:=|>|:{1,3}=|\|\||:|=>|\?=|,)[`'"\s=]{0,5}([a-f0-9]{32})(?:[`'"\s;]|\\[nr]|$)/gi,
+    confidence: "generic",
+  },
+  {
+    id: "linkedin-client-id",
+    description: "LinkedIn Client ID (contextual)",
+    // Same keyword-proximity shape. Value is a bare 14-char lowercase-alnum
+    // value, gated on "linkedin"/"linked_in"/"linked-in" (optional
+    // separator, still a flat pattern) appearing before the assignment.
+    // "generic" tier for the same reason as the rest of this class.
+    build: () =>
+      /[\w.-]{0,50}?linked[_-]?in(?:[ \t\w.-]{0,20})[\s'"]{0,3}(?:=|>|:{1,3}=|\|\||:|=>|\?=|,)[`'"\s=]{0,5}([a-z0-9]{14})(?:[`'"\s;]|\\[nr]|$)/gi,
+    confidence: "generic",
+  },
+  {
+    id: "linkedin-client-secret",
+    description: "LinkedIn Client Secret (contextual)",
+    // Same keyword-proximity shape and keyword gate as linkedin-client-id.
+    // Value is a bare 16-char lowercase-alnum value (longer than the client
+    // ID shape, distinguishing the two rules). "generic" tier for the same
+    // reason as the rest of this class.
+    build: () =>
+      /[\w.-]{0,50}?linked[_-]?in(?:[ \t\w.-]{0,20})[\s'"]{0,3}(?:=|>|:{1,3}=|\|\||:|=>|\?=|,)[`'"\s=]{0,5}([a-z0-9]{16})(?:[`'"\s;]|\\[nr]|$)/gi,
+    confidence: "generic",
+  },
+  {
+    id: "mattermost-access-token",
+    description: "Mattermost Access Token (contextual)",
+    // Same keyword-proximity shape. Value is a bare 26-char lowercase-alnum
+    // value, gated on "mattermost" appearing before the assignment.
+    // "generic" tier for the same reason as the rest of this class.
+    build: () =>
+      /[\w.-]{0,50}?mattermost(?:[ \t\w.-]{0,20})[\s'"]{0,3}(?:=|>|:{1,3}=|\|\||:|=>|\?=|,)[`'"\s=]{0,5}([a-z0-9]{26})(?:[`'"\s;]|\\[nr]|$)/gi,
+    confidence: "generic",
+  },
+  {
+    id: "dropbox-long-lived-api-token",
+    description: "Dropbox Long-Lived API Token (contextual)",
+    // Same keyword-proximity shape. Value is an 11-char lowercase-alnum
+    // segment, a fixed "AAAAAAAAAA" middle segment, then a 43-char
+    // alnum/"-"/"_"/"=" tail, all inside one capture group, gated on
+    // "dropbox" appearing before the assignment. Distinct from the existing
+    // "dropbox-api-token" rule (different id, different shape). "generic"
+    // tier for the same reason as the rest of this class.
+    build: () =>
+      /[\w.-]{0,50}?dropbox(?:[ \t\w.-]{0,20})[\s'"]{0,3}(?:=|>|:{1,3}=|\|\||:|=>|\?=|,)[`'"\s=]{0,5}([a-z0-9]{11}(?:AAAAAAAAAA)[a-z0-9\-_=]{43})(?:[`'"\s;]|\\[nr]|$)/gi,
+    confidence: "generic",
+  },
+  {
+    id: "dropbox-short-lived-api-token",
+    description: "Dropbox Short-Lived API Token (contextual)",
+    // Same keyword-proximity shape and keyword gate as
+    // dropbox-long-lived-api-token. Value has a fixed "sl." prefix plus a
+    // 135-char alnum/"-"/"="/"_" body. "generic" tier for the same reason
+    // as the rest of this class.
+    build: () =>
+      /[\w.-]{0,50}?dropbox(?:[ \t\w.-]{0,20})[\s'"]{0,3}(?:=|>|:{1,3}=|\|\||:|=>|\?=|,)[`'"\s=]{0,5}(sl\.[a-z0-9\-=_]{135})(?:[`'"\s;]|\\[nr]|$)/gi,
+    confidence: "generic",
+  },
+  {
+    id: "defined-networking-api-token",
+    description: "Defined Networking API Token (contextual)",
+    // Same keyword-proximity shape. Value has a fixed "dnkey-" prefix, then
+    // two hyphen-separated segments (26-char then 52-char, alnum/"="/"_"/
+    // "-") kept inside one capture group, gated on "dnkey" appearing before
+    // the assignment. "generic" tier for the same reason as the rest of
+    // this class.
+    build: () =>
+      /[\w.-]{0,50}?dnkey(?:[ \t\w.-]{0,20})[\s'"]{0,3}(?:=|>|:{1,3}=|\|\||:|=>|\?=|,)[`'"\s=]{0,5}(dnkey-[a-z0-9=_-]{26}-[a-z0-9=_-]{52})(?:[`'"\s;]|\\[nr]|$)/gi,
+    confidence: "generic",
+  },
 ];
 
 /**

@@ -1262,6 +1262,276 @@ describe("scanLine — true positives (known-leaked-secret patterns)", () => {
     expect(findings.some((f) => f.ruleId === "facebook-secret")).toBe(false);
   });
 
+  it("flags a Gitter Access Token-shaped value when the keyword 'gitter' is nearby", () => {
+    const value = "aB3fD1x9Qz".repeat(4).slice(0, 40).toLowerCase();
+    const findings = scanLine(line(`const gitter_access_token = "${value}";`));
+    expect(findings.some((f) => f.ruleId === "gitter-access-token" && f.confidence === "generic")).toBe(true);
+  });
+
+  it("does not flag a value shaped like a Gitter Access Token without the keyword nearby", () => {
+    const value = "aB3fD1x9Qz".repeat(4).slice(0, 40).toLowerCase();
+    const findings = scanLine(line(`const unrelated_var = "${value}";`));
+    expect(findings.some((f) => f.ruleId === "gitter-access-token")).toBe(false);
+  });
+
+  it("does not flag a Gitter Access Token-shaped value that is one character short even with the keyword nearby", () => {
+    const value = "aB3fD1x9Qz".repeat(4).slice(0, 39).toLowerCase();
+    const findings = scanLine(line(`const gitter_access_token = "${value}";`));
+    expect(findings.some((f) => f.ruleId === "gitter-access-token")).toBe(false);
+  });
+
+  it("flags a GoCardless API Token-shaped value when the keyword 'gocardless' is nearby", () => {
+    const value = "live_" + "aB3fD1x9Qz".repeat(4).slice(0, 40).toLowerCase();
+    const findings = scanLine(line(`const gocardless_api_token = "${value}";`));
+    expect(findings.some((f) => f.ruleId === "gocardless-api-token" && f.confidence === "generic")).toBe(true);
+  });
+
+  it("does not flag a value shaped like a GoCardless API Token without the keyword nearby", () => {
+    const value = "live_" + "aB3fD1x9Qz".repeat(4).slice(0, 40).toLowerCase();
+    const findings = scanLine(line(`const unrelated_var = "${value}";`));
+    expect(findings.some((f) => f.ruleId === "gocardless-api-token")).toBe(false);
+  });
+
+  it("does not flag a GoCardless API Token-shaped value that is one character short even with the keyword nearby", () => {
+    const value = "live_" + "aB3fD1x9Qz".repeat(4).slice(0, 39).toLowerCase();
+    const findings = scanLine(line(`const gocardless_api_token = "${value}";`));
+    expect(findings.some((f) => f.ruleId === "gocardless-api-token")).toBe(false);
+  });
+
+  it("flags a JFrog API Key-shaped value when the keyword 'jfrog' is nearby", () => {
+    const value = "aB3fD1x9Qz".repeat(8).slice(0, 73).toLowerCase();
+    const findings = scanLine(line(`const jfrog_api_key = "${value}";`));
+    expect(findings.some((f) => f.ruleId === "jfrog-api-key" && f.confidence === "generic")).toBe(true);
+  });
+
+  it("does not flag a value shaped like a JFrog API Key without the keyword nearby", () => {
+    const value = "aB3fD1x9Qz".repeat(8).slice(0, 73).toLowerCase();
+    const findings = scanLine(line(`const unrelated_var = "${value}";`));
+    expect(findings.some((f) => f.ruleId === "jfrog-api-key")).toBe(false);
+  });
+
+  it("does not flag a JFrog API Key-shaped value that is one character short even with the keyword nearby", () => {
+    const value = "aB3fD1x9Qz".repeat(8).slice(0, 72).toLowerCase();
+    const findings = scanLine(line(`const jfrog_api_key = "${value}";`));
+    expect(findings.some((f) => f.ruleId === "jfrog-api-key")).toBe(false);
+  });
+
+  it("flags a JFrog Identity Token-shaped value when the keyword 'jfrog' is nearby", () => {
+    const value = "aB3fD1x9Qz".repeat(7).slice(0, 64).toLowerCase();
+    const findings = scanLine(line(`const jfrog_identity_token = "${value}";`));
+    expect(findings.some((f) => f.ruleId === "jfrog-identity-token" && f.confidence === "generic")).toBe(true);
+  });
+
+  it("does not flag a value shaped like a JFrog Identity Token without the keyword nearby", () => {
+    const value = "aB3fD1x9Qz".repeat(7).slice(0, 64).toLowerCase();
+    const findings = scanLine(line(`const unrelated_var = "${value}";`));
+    expect(findings.some((f) => f.ruleId === "jfrog-identity-token")).toBe(false);
+  });
+
+  it("does not flag a JFrog Identity Token-shaped value that is one character short even with the keyword nearby", () => {
+    const value = "aB3fD1x9Qz".repeat(7).slice(0, 63).toLowerCase();
+    const findings = scanLine(line(`const jfrog_identity_token = "${value}";`));
+    expect(findings.some((f) => f.ruleId === "jfrog-identity-token")).toBe(false);
+  });
+
+  it("flags a Kraken Access Token-shaped value when the keyword 'kraken' is nearby", () => {
+    const value = "aB3fD1x9Qz".repeat(9).slice(0, 85).toLowerCase();
+    const findings = scanLine(line(`const kraken_access_token = "${value}";`));
+    expect(findings.some((f) => f.ruleId === "kraken-access-token" && f.confidence === "generic")).toBe(true);
+  });
+
+  it("does not flag a value shaped like a Kraken Access Token without the keyword nearby", () => {
+    const value = "aB3fD1x9Qz".repeat(9).slice(0, 85).toLowerCase();
+    const findings = scanLine(line(`const unrelated_var = "${value}";`));
+    expect(findings.some((f) => f.ruleId === "kraken-access-token")).toBe(false);
+  });
+
+  it("does not flag a Kraken Access Token-shaped value that is one character short even with the keyword nearby", () => {
+    const value = "aB3fD1x9Qz".repeat(8).slice(0, 79).toLowerCase();
+    const findings = scanLine(line(`const kraken_access_token = "${value}";`));
+    expect(findings.some((f) => f.ruleId === "kraken-access-token")).toBe(false);
+  });
+
+  it("flags a Kucoin Access Token-shaped value when the keyword 'kucoin' is nearby", () => {
+    const value = "ab3fd1".repeat(4).slice(0, 24);
+    const findings = scanLine(line(`const kucoin_access_token = "${value}";`));
+    expect(findings.some((f) => f.ruleId === "kucoin-access-token" && f.confidence === "generic")).toBe(true);
+  });
+
+  it("does not flag a value shaped like a Kucoin Access Token without the keyword nearby", () => {
+    const value = "ab3fd1".repeat(4).slice(0, 24);
+    const findings = scanLine(line(`const unrelated_var = "${value}";`));
+    expect(findings.some((f) => f.ruleId === "kucoin-access-token")).toBe(false);
+  });
+
+  it("does not flag a Kucoin Access Token-shaped value that is one character short even with the keyword nearby", () => {
+    const value = "ab3fd1".repeat(4).slice(0, 23);
+    const findings = scanLine(line(`const kucoin_access_token = "${value}";`));
+    expect(findings.some((f) => f.ruleId === "kucoin-access-token")).toBe(false);
+  });
+
+  it("flags a Kucoin Secret Key-shaped value when the keyword 'kucoin' is nearby", () => {
+    const value = "ab3fd1a9-1234-5678-9abc-def012345678";
+    const findings = scanLine(line(`const kucoin_secret_key = "${value}";`));
+    expect(findings.some((f) => f.ruleId === "kucoin-secret-key" && f.confidence === "generic")).toBe(true);
+  });
+
+  it("does not flag a value shaped like a Kucoin Secret Key without the keyword nearby", () => {
+    const value = "ab3fd1a9-1234-5678-9abc-def012345678";
+    const findings = scanLine(line(`const unrelated_var = "${value}";`));
+    expect(findings.some((f) => f.ruleId === "kucoin-secret-key")).toBe(false);
+  });
+
+  it("does not flag a Kucoin Secret Key-shaped value that is one character short even with the keyword nearby", () => {
+    const value = "ab3fd1a9-1234-5678-9abc-def01234567";
+    const findings = scanLine(line(`const kucoin_secret_key = "${value}";`));
+    expect(findings.some((f) => f.ruleId === "kucoin-secret-key")).toBe(false);
+  });
+
+  it("flags a LaunchDarkly Access Token-shaped value when the keyword 'launchdarkly' is nearby", () => {
+    const value = "aB3fD1x9Qz".repeat(4).slice(0, 40).toLowerCase();
+    const findings = scanLine(line(`const launchdarkly_access_token = "${value}";`));
+    expect(findings.some((f) => f.ruleId === "launchdarkly-access-token" && f.confidence === "generic")).toBe(true);
+  });
+
+  it("does not flag a value shaped like a LaunchDarkly Access Token without the keyword nearby", () => {
+    const value = "aB3fD1x9Qz".repeat(4).slice(0, 40).toLowerCase();
+    const findings = scanLine(line(`const unrelated_var = "${value}";`));
+    expect(findings.some((f) => f.ruleId === "launchdarkly-access-token")).toBe(false);
+  });
+
+  it("does not flag a LaunchDarkly Access Token-shaped value that is one character short even with the keyword nearby", () => {
+    const value = "aB3fD1x9Qz".repeat(4).slice(0, 39).toLowerCase();
+    const findings = scanLine(line(`const launchdarkly_access_token = "${value}";`));
+    expect(findings.some((f) => f.ruleId === "launchdarkly-access-token")).toBe(false);
+  });
+
+  it("flags a Linear Client Secret-shaped value when the keyword 'linear' is nearby", () => {
+    const value = "b".repeat(32);
+    const findings = scanLine(line(`const linear_client_secret = "${value}";`));
+    expect(findings.some((f) => f.ruleId === "linear-client-secret" && f.confidence === "generic")).toBe(true);
+  });
+
+  it("does not flag a value shaped like a Linear Client Secret without the keyword nearby", () => {
+    const value = "b".repeat(32);
+    const findings = scanLine(line(`const unrelated_var = "${value}";`));
+    expect(findings.some((f) => f.ruleId === "linear-client-secret")).toBe(false);
+  });
+
+  it("does not flag a Linear Client Secret-shaped value that is one character short even with the keyword nearby", () => {
+    const value = "b".repeat(31);
+    const findings = scanLine(line(`const linear_client_secret = "${value}";`));
+    expect(findings.some((f) => f.ruleId === "linear-client-secret")).toBe(false);
+  });
+
+  it("flags a LinkedIn Client ID-shaped value when the keyword 'linkedin' is nearby", () => {
+    const value = "aB3fD1x9Qz".repeat(2).slice(0, 14).toLowerCase();
+    const findings = scanLine(line(`const linkedin_client_id = "${value}";`));
+    expect(findings.some((f) => f.ruleId === "linkedin-client-id" && f.confidence === "generic")).toBe(true);
+  });
+
+  it("does not flag a value shaped like a LinkedIn Client ID without the keyword nearby", () => {
+    const value = "aB3fD1x9Qz".repeat(2).slice(0, 14).toLowerCase();
+    const findings = scanLine(line(`const unrelated_var = "${value}";`));
+    expect(findings.some((f) => f.ruleId === "linkedin-client-id")).toBe(false);
+  });
+
+  it("does not flag a LinkedIn Client ID-shaped value that is one character short even with the keyword nearby", () => {
+    const value = "aB3fD1x9Qz".repeat(2).slice(0, 13).toLowerCase();
+    const findings = scanLine(line(`const linkedin_client_id = "${value}";`));
+    expect(findings.some((f) => f.ruleId === "linkedin-client-id")).toBe(false);
+  });
+
+  it("flags a LinkedIn Client Secret-shaped value when the keyword 'linkedin' is nearby", () => {
+    const value = "aB3fD1x9Qz".repeat(2).slice(0, 16).toLowerCase();
+    const findings = scanLine(line(`const linkedin_client_secret = "${value}";`));
+    expect(findings.some((f) => f.ruleId === "linkedin-client-secret" && f.confidence === "generic")).toBe(true);
+  });
+
+  it("does not flag a value shaped like a LinkedIn Client Secret without the keyword nearby", () => {
+    const value = "aB3fD1x9Qz".repeat(2).slice(0, 16).toLowerCase();
+    const findings = scanLine(line(`const unrelated_var = "${value}";`));
+    expect(findings.some((f) => f.ruleId === "linkedin-client-secret")).toBe(false);
+  });
+
+  it("does not flag a LinkedIn Client Secret-shaped value that is one character short even with the keyword nearby", () => {
+    const value = "aB3fD1x9Qz".repeat(2).slice(0, 15).toLowerCase();
+    const findings = scanLine(line(`const linkedin_client_secret = "${value}";`));
+    expect(findings.some((f) => f.ruleId === "linkedin-client-secret")).toBe(false);
+  });
+
+  it("flags a Mattermost Access Token-shaped value when the keyword 'mattermost' is nearby", () => {
+    const value = "aB3fD1x9Qz".repeat(3).slice(0, 26).toLowerCase();
+    const findings = scanLine(line(`const mattermost_access_token = "${value}";`));
+    expect(findings.some((f) => f.ruleId === "mattermost-access-token" && f.confidence === "generic")).toBe(true);
+  });
+
+  it("does not flag a value shaped like a Mattermost Access Token without the keyword nearby", () => {
+    const value = "aB3fD1x9Qz".repeat(3).slice(0, 26).toLowerCase();
+    const findings = scanLine(line(`const unrelated_var = "${value}";`));
+    expect(findings.some((f) => f.ruleId === "mattermost-access-token")).toBe(false);
+  });
+
+  it("does not flag a Mattermost Access Token-shaped value that is one character short even with the keyword nearby", () => {
+    const value = "aB3fD1x9Qz".repeat(3).slice(0, 25).toLowerCase();
+    const findings = scanLine(line(`const mattermost_access_token = "${value}";`));
+    expect(findings.some((f) => f.ruleId === "mattermost-access-token")).toBe(false);
+  });
+
+  it("flags a Dropbox Long-Lived API Token-shaped value when the keyword 'dropbox' is nearby", () => {
+    const value = "aB3fD1x9Qz".repeat(2).slice(0, 11).toLowerCase() + "AAAAAAAAAA" + "aB3fD1x9Qz".repeat(5).slice(0, 43).toLowerCase();
+    const findings = scanLine(line(`const dropbox_long_lived_token = "${value}";`));
+    expect(findings.some((f) => f.ruleId === "dropbox-long-lived-api-token" && f.confidence === "generic")).toBe(true);
+  });
+
+  it("does not flag a value shaped like a Dropbox Long-Lived API Token without the keyword nearby", () => {
+    const value = "aB3fD1x9Qz".repeat(2).slice(0, 11).toLowerCase() + "AAAAAAAAAA" + "aB3fD1x9Qz".repeat(5).slice(0, 43).toLowerCase();
+    const findings = scanLine(line(`const unrelated_var = "${value}";`));
+    expect(findings.some((f) => f.ruleId === "dropbox-long-lived-api-token")).toBe(false);
+  });
+
+  it("does not flag a Dropbox Long-Lived API Token-shaped value that is one character short even with the keyword nearby", () => {
+    const value = "aB3fD1x9Qz".repeat(2).slice(0, 11).toLowerCase() + "AAAAAAAAAA" + "aB3fD1x9Qz".repeat(5).slice(0, 42).toLowerCase();
+    const findings = scanLine(line(`const dropbox_long_lived_token = "${value}";`));
+    expect(findings.some((f) => f.ruleId === "dropbox-long-lived-api-token")).toBe(false);
+  });
+
+  it("flags a Dropbox Short-Lived API Token-shaped value when the keyword 'dropbox' is nearby", () => {
+    const value = "sl." + "aB3fD1x9Qz".repeat(14).slice(0, 135).toLowerCase();
+    const findings = scanLine(line(`const dropbox_short_lived_token = "${value}";`));
+    expect(findings.some((f) => f.ruleId === "dropbox-short-lived-api-token" && f.confidence === "generic")).toBe(true);
+  });
+
+  it("does not flag a value shaped like a Dropbox Short-Lived API Token without the keyword nearby", () => {
+    const value = "sl." + "aB3fD1x9Qz".repeat(14).slice(0, 135).toLowerCase();
+    const findings = scanLine(line(`const unrelated_var = "${value}";`));
+    expect(findings.some((f) => f.ruleId === "dropbox-short-lived-api-token")).toBe(false);
+  });
+
+  it("does not flag a Dropbox Short-Lived API Token-shaped value that is one character short even with the keyword nearby", () => {
+    const value = "sl." + "aB3fD1x9Qz".repeat(14).slice(0, 134).toLowerCase();
+    const findings = scanLine(line(`const dropbox_short_lived_token = "${value}";`));
+    expect(findings.some((f) => f.ruleId === "dropbox-short-lived-api-token")).toBe(false);
+  });
+
+  it("flags a Defined Networking API Token-shaped value when the keyword 'dnkey' is nearby", () => {
+    const value = "dnkey-" + "aB3fD1x9Qz".repeat(3).slice(0, 26).toLowerCase() + "-" + "aB3fD1x9Qz".repeat(6).slice(0, 52).toLowerCase();
+    const findings = scanLine(line(`const dnkey_api_token = "${value}";`));
+    expect(findings.some((f) => f.ruleId === "defined-networking-api-token" && f.confidence === "generic")).toBe(true);
+  });
+
+  it("does not flag a value shaped like a Defined Networking API Token without the keyword nearby", () => {
+    const value = "dnkey-" + "aB3fD1x9Qz".repeat(3).slice(0, 26).toLowerCase() + "-" + "aB3fD1x9Qz".repeat(6).slice(0, 52).toLowerCase();
+    const findings = scanLine(line(`const unrelated_var = "${value}";`));
+    expect(findings.some((f) => f.ruleId === "defined-networking-api-token")).toBe(false);
+  });
+
+  it("does not flag a Defined Networking API Token-shaped value that is one character short even with the keyword nearby", () => {
+    const value = "dnkey-" + "aB3fD1x9Qz".repeat(3).slice(0, 25).toLowerCase() + "-" + "aB3fD1x9Qz".repeat(6).slice(0, 52).toLowerCase();
+    const findings = scanLine(line(`const dnkey_api_token = "${value}";`));
+    expect(findings.some((f) => f.ruleId === "defined-networking-api-token")).toBe(false);
+  });
+
   it("flags a generic high-entropy value assigned to a secret-like variable name", () => {
     const findings = scanLine(line(`const apiToken = "zT9pQ2xR7mK4vL8nW1sD6fH3jC0bA5eY";`));
     expect(findings.some((f) => f.ruleId === "generic-high-entropy-secret" && f.confidence === "generic")).toBe(
