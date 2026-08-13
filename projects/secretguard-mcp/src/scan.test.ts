@@ -2146,6 +2146,132 @@ describe("scanLine — true positives (known-leaked-secret patterns)", () => {
     expect(findings.some((f) => f.ruleId === "yandex-aws-access-token")).toBe(false);
   });
 
+  it("flags a Cohere Token-shaped value when the keyword 'cohere' is nearby", () => {
+    const value = "ab3fd1".repeat(7).slice(0, 40);
+    const findings = scanLine(line(`const cohere_api_key = "${value}";`));
+    expect(findings.some((f) => f.ruleId === "cohere-api-token" && f.confidence === "generic")).toBe(true);
+  });
+
+  it("does not flag a value shaped like a Cohere Token without the keyword nearby", () => {
+    const value = "ab3fd1".repeat(7).slice(0, 40);
+    const findings = scanLine(line(`const unrelated_var = "${value}";`));
+    expect(findings.some((f) => f.ruleId === "cohere-api-token")).toBe(false);
+  });
+
+  it("does not flag a Cohere Token-shaped value that is one character short even with the keyword nearby", () => {
+    const value = "ab3fd1".repeat(7).slice(0, 39);
+    const findings = scanLine(line(`const cohere_api_key = "${value}";`));
+    expect(findings.some((f) => f.ruleId === "cohere-api-token")).toBe(false);
+  });
+
+  it("flags a Snyk API Token-shaped value when a compound snyk keyword is nearby", () => {
+    const value = "a1b2c3d4-e5f6-a1b2-c3d4-e5f6a1b2c3d4";
+    const findings = scanLine(line(`const snyk_api_token = "${value}";`));
+    expect(findings.some((f) => f.ruleId === "snyk-api-token" && f.confidence === "generic")).toBe(true);
+  });
+
+  it("does not flag a value shaped like a Snyk API Token without the keyword nearby", () => {
+    const value = "a1b2c3d4-e5f6-a1b2-c3d4-e5f6a1b2c3d4";
+    const findings = scanLine(line(`const unrelated_var = "${value}";`));
+    expect(findings.some((f) => f.ruleId === "snyk-api-token")).toBe(false);
+  });
+
+  it("does not flag a malformed Snyk API Token-shaped value even with the keyword nearby", () => {
+    const value = "a1b2c3d4-e5f6-a1b-c3d4-e5f6a1b2c3d4";
+    const findings = scanLine(line(`const snyk_api_token = "${value}";`));
+    expect(findings.some((f) => f.ruleId === "snyk-api-token")).toBe(false);
+  });
+
+  it("flags a Sonar API Token-shaped value when the keyword 'sonar_token' is nearby", () => {
+    const value = "ab3fd1".repeat(7).slice(0, 40);
+    const findings = scanLine(line(`const sonar_token = "${value}";`));
+    expect(findings.some((f) => f.ruleId === "sonar-api-token" && f.confidence === "generic")).toBe(true);
+  });
+
+  it("does not flag a value shaped like a Sonar API Token without the keyword nearby", () => {
+    const value = "ab3fd1".repeat(7).slice(0, 40);
+    const findings = scanLine(line(`const unrelated_var = "${value}";`));
+    expect(findings.some((f) => f.ruleId === "sonar-api-token")).toBe(false);
+  });
+
+  it("does not flag a Sonar API Token-shaped value that is one character short even with the keyword nearby", () => {
+    const value = "ab3fd1".repeat(7).slice(0, 39);
+    const findings = scanLine(line(`const sonar_token = "${value}";`));
+    expect(findings.some((f) => f.ruleId === "sonar-api-token")).toBe(false);
+  });
+
+  it("flags an Okta Access Token-shaped value when the keyword 'okta' is nearby", () => {
+    const value = "00" + "ab3fd1".repeat(7).slice(0, 40);
+    const findings = scanLine(line(`const okta_access_token = "${value}";`));
+    expect(findings.some((f) => f.ruleId === "okta-access-token" && f.confidence === "generic")).toBe(true);
+  });
+
+  it("does not flag a value shaped like an Okta Access Token without the keyword nearby", () => {
+    const value = "00" + "ab3fd1".repeat(7).slice(0, 40);
+    const findings = scanLine(line(`const unrelated_var = "${value}";`));
+    expect(findings.some((f) => f.ruleId === "okta-access-token")).toBe(false);
+  });
+
+  it("does not flag an Okta Access Token-shaped value that is one character short even with the keyword nearby", () => {
+    const value = "00" + "ab3fd1".repeat(7).slice(0, 39);
+    const findings = scanLine(line(`const okta_access_token = "${value}";`));
+    expect(findings.some((f) => f.ruleId === "okta-access-token")).toBe(false);
+  });
+
+  it("flags an Etsy Access Token-shaped value when the keyword 'etsy' is nearby", () => {
+    const value = "ab3fd1".repeat(4).slice(0, 24);
+    const findings = scanLine(line(`const etsy_access_token = "${value}";`));
+    expect(findings.some((f) => f.ruleId === "etsy-access-token" && f.confidence === "generic")).toBe(true);
+  });
+
+  it("does not flag a value shaped like an Etsy Access Token without the keyword nearby", () => {
+    const value = "ab3fd1".repeat(4).slice(0, 24);
+    const findings = scanLine(line(`const unrelated_var = "${value}";`));
+    expect(findings.some((f) => f.ruleId === "etsy-access-token")).toBe(false);
+  });
+
+  it("does not flag an Etsy Access Token-shaped value that is one character short even with the keyword nearby", () => {
+    const value = "ab3fd1".repeat(4).slice(0, 23);
+    const findings = scanLine(line(`const etsy_access_token = "${value}";`));
+    expect(findings.some((f) => f.ruleId === "etsy-access-token")).toBe(false);
+  });
+
+  it("flags a Cisco Meraki API Key-shaped value when the keyword 'meraki' is nearby", () => {
+    const value = "ab3fd1".repeat(7).slice(0, 40);
+    const findings = scanLine(line(`const meraki_api_key = "${value}";`));
+    expect(findings.some((f) => f.ruleId === "cisco-meraki-api-key" && f.confidence === "generic")).toBe(true);
+  });
+
+  it("does not flag a value shaped like a Cisco Meraki API Key without the keyword nearby", () => {
+    const value = "ab3fd1".repeat(7).slice(0, 40);
+    const findings = scanLine(line(`const unrelated_var = "${value}";`));
+    expect(findings.some((f) => f.ruleId === "cisco-meraki-api-key")).toBe(false);
+  });
+
+  it("does not flag a Cisco Meraki API Key-shaped value that is one character short even with the keyword nearby", () => {
+    const value = "ab3fd1".repeat(7).slice(0, 39);
+    const findings = scanLine(line(`const meraki_api_key = "${value}";`));
+    expect(findings.some((f) => f.ruleId === "cisco-meraki-api-key")).toBe(false);
+  });
+
+  it("flags a SumoLogic Access Token-shaped value when the keyword 'sumo' is nearby", () => {
+    const value = "ab3fd1".repeat(11).slice(0, 64);
+    const findings = scanLine(line(`const sumo_access_token = "${value}";`));
+    expect(findings.some((f) => f.ruleId === "sumologic-access-token" && f.confidence === "generic")).toBe(true);
+  });
+
+  it("does not flag a value shaped like a SumoLogic Access Token without the keyword nearby", () => {
+    const value = "ab3fd1".repeat(11).slice(0, 64);
+    const findings = scanLine(line(`const unrelated_var = "${value}";`));
+    expect(findings.some((f) => f.ruleId === "sumologic-access-token")).toBe(false);
+  });
+
+  it("does not flag a SumoLogic Access Token-shaped value that is one character short even with the keyword nearby", () => {
+    const value = "ab3fd1".repeat(11).slice(0, 63);
+    const findings = scanLine(line(`const sumo_access_token = "${value}";`));
+    expect(findings.some((f) => f.ruleId === "sumologic-access-token")).toBe(false);
+  });
+
   it("flags a generic high-entropy value assigned to a secret-like variable name", () => {
     const findings = scanLine(line(`const apiToken = "zT9pQ2xR7mK4vL8nW1sD6fH3jC0bA5eY";`));
     expect(findings.some((f) => f.ruleId === "generic-high-entropy-secret" && f.confidence === "generic")).toBe(

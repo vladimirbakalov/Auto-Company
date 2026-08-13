@@ -34148,6 +34148,100 @@ exports.PATTERN_RULES = [
         build: () => /[\w.-]{0,50}?yandex(?:[ \t\w.-]{0,20})[\s'"]{0,3}(?:=|>|:{1,3}=|\|\||:|=>|\?=|,)[`'"\s=]{0,5}(YC[a-zA-Z0-9_-]{38})(?:[`'"\s;]|\\[nr]|$)/gi,
         confidence: "generic",
     },
+    {
+        id: "cohere-api-token",
+        description: "Cohere Token (contextual)",
+        // Same keyword-proximity shape. Keyword gate is a flat alternation of
+        // "cohere" or "CO_API_KEY" (both matched case-insensitively, same as
+        // the rest of this class). Value is a bare 40-char alnum body.
+        // "generic" tier for the same reason as the rest of this class.
+        build: () => /[\w.-]{0,50}?(?:cohere|CO_API_KEY)(?:[ \t\w.-]{0,20})[\s'"]{0,3}(?:=|>|:{1,3}=|\|\||:|=>|\?=|,)[`'"\s=]{0,5}([a-zA-Z0-9]{40})(?:[`'"\s;]|\\[nr]|$)/gi,
+        confidence: "generic",
+    },
+    {
+        id: "snyk-api-token",
+        description: "Snyk API Token (contextual)",
+        // Same keyword-proximity shape, but the keyword gate is a compound
+        // fragment ("snyk" plus optional "api"/"oauth" plus "key"/"token",
+        // e.g. "snyk_api_token", "SNYK_TOKEN", "snyk_oauth_key") instead of a
+        // single flat name, matched case-insensitively like the rest of this
+        // class. Value is UUID-shaped. "generic" tier for the same reason as
+        // the rest of this class.
+        build: () => /[\w.-]{0,50}?snyk[_.-]?(?:(?:api|oauth)[_.-]?)?(?:key|token)(?:[ \t\w.-]{0,20})[\s'"]{0,3}(?:=|>|:{1,3}=|\|\||:|=>|\?=|,)[`'"\s=]{0,5}([0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})(?:[`'"\s;]|\\[nr]|$)/gi,
+        confidence: "generic",
+    },
+    {
+        id: "sonar-api-token",
+        description: "Sonar API Token (contextual)",
+        // Same keyword-proximity shape, keyword gate is "sonar" plus "login"
+        // or "token" (e.g. "sonar_token", "sonar.login"), matched
+        // case-insensitively like the rest of this class. Value is a bare
+        // 40-char alnum/"=_-" body with an optional "squ_"/"sqp_"/"sqa_"
+        // prefix, all inside one capture group — upstream captures this value
+        // via a second, non-value capture group around the "login|token"
+        // keyword alternative (its `secretGroup = 2`); that inner group is
+        // flattened to non-capturing here so the value stays in capture group
+        // 1, matching this codebase's single-capture-group convention.
+        // "generic" tier for the same reason as the rest of this class.
+        build: () => /[\w.-]{0,50}?sonar[_.-]?(?:login|token)(?:[ \t\w.-]{0,20})[\s'"]{0,3}(?:=|>|:{1,3}=|\|\||:|=>|\?=|,)[`'"\s=]{0,5}((?:squ_|sqp_|sqa_)?[a-z0-9=_-]{40})(?:[`'"\s;]|\\[nr]|$)/gi,
+        confidence: "generic",
+    },
+    {
+        id: "okta-access-token",
+        description: "Okta Access Token (contextual)",
+        // Same keyword-proximity shape, but upstream restricts the keyword to
+        // exactly three case spellings ("okta", "Okta", "OKTA" — not arbitrary
+        // mixed case) via an inline case-sensitive sub-pattern that has no
+        // direct ECMAScript equivalent, so this rule is built without the "i"
+        // flag and spells out that exact alternation instead of a single
+        // case-insensitive literal. The value pattern (a fixed "00" prefix
+        // plus a 40-char "\w"/"="/"-" body) is already case-complete via "\w",
+        // so it needs no further change from the case-insensitive-flag
+        // version. "generic" tier for the same reason as the rest of this
+        // class.
+        build: () => /[\w.-]{0,50}?(?:okta|Okta|OKTA)(?:[ \t\w.-]{0,20})[\s'"]{0,3}(?:=|>|:{1,3}=|\|\||:|=>|\?=|,)[`'"\s=]{0,5}(00[\w=\-]{40})(?:[`'"\s;]|\\[nr]|$)/g,
+        confidence: "generic",
+    },
+    {
+        id: "etsy-access-token",
+        description: "Etsy Access Token (contextual)",
+        // Same keyword-proximity shape and same "exactly three case spellings"
+        // constraint as okta-access-token (keyword must be "etsy", "Etsy", or
+        // "ETSY"), so this rule is likewise built without the "i" flag. Unlike
+        // okta-access-token, the value pattern (a bare 24-char alnum body) was
+        // case-insensitive under upstream's outer flag, so it is widened from
+        // upstream's literal "[a-z0-9]{24}" to "[a-zA-Z0-9]{24}" here to
+        // preserve that behavior without a global "i" flag. "generic" tier for
+        // the same reason as the rest of this class.
+        build: () => /[\w.-]{0,50}?(?:ETSY|Etsy|etsy)(?:[ \t\w.-]{0,20})[\s'"]{0,3}(?:=|>|:{1,3}=|\|\||:|=>|\?=|,)[`'"\s=]{0,5}([a-zA-Z0-9]{24})(?:[`'"\s;]|\\[nr]|$)/g,
+        confidence: "generic",
+    },
+    {
+        id: "cisco-meraki-api-key",
+        description: "Cisco Meraki API Key (contextual)",
+        // Same keyword-proximity shape and same "exactly three case spellings"
+        // constraint as okta-access-token (keyword must be "meraki", "Meraki",
+        // or "MERAKI"), so this rule is likewise built without the "i" flag,
+        // with the value pattern (a bare 40-char hex body) widened from
+        // upstream's case-insensitive-under-flag "[0-9a-f]{40}" to
+        // "[0-9a-fA-F]{40}" to preserve that behavior directly. "generic" tier
+        // for the same reason as the rest of this class.
+        build: () => /[\w.-]{0,50}?(?:meraki|Meraki|MERAKI)(?:[ \t\w.-]{0,20})[\s'"]{0,3}(?:=|>|:{1,3}=|\|\||:|=>|\?=|,)[`'"\s=]{0,5}([0-9a-fA-F]{40})(?:[`'"\s;]|\\[nr]|$)/g,
+        confidence: "generic",
+    },
+    {
+        id: "sumologic-access-token",
+        description: "SumoLogic Access Token (contextual)",
+        // Same keyword-proximity shape and same "exactly three case spellings"
+        // constraint as okta-access-token (keyword must be "sumo", "Sumo", or
+        // "SUMO"), so this rule is likewise built without the "i" flag, with
+        // the value pattern (a bare 64-char alnum body) widened from
+        // upstream's case-insensitive-under-flag "[a-z0-9]{64}" to
+        // "[a-zA-Z0-9]{64}" to preserve that behavior directly. "generic" tier
+        // for the same reason as the rest of this class.
+        build: () => /[\w.-]{0,50}?(?:sumo|Sumo|SUMO)(?:[ \t\w.-]{0,20})[\s'"]{0,3}(?:=|>|:{1,3}=|\|\||:|=>|\?=|,)[`'"\s=]{0,5}([a-zA-Z0-9]{64})(?:[`'"\s;]|\\[nr]|$)/g,
+        confidence: "generic",
+    },
 ];
 /**
  * Variable-name fragment that makes a high-entropy value worth flagging.
