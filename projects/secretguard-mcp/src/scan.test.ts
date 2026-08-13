@@ -992,6 +992,60 @@ describe("scanLine — true positives (known-leaked-secret patterns)", () => {
     expect(findings.some((f) => f.ruleId === "asana-client-secret")).toBe(false);
   });
 
+  it("flags a Bitbucket Client Secret-shaped value when the keyword 'bitbucket' is nearby", () => {
+    const value = "aB3fD1x9Qz".repeat(7).slice(0, 64).toLowerCase();
+    const findings = scanLine(line(`const bitbucket_client_secret = "${value}";`));
+    expect(findings.some((f) => f.ruleId === "bitbucket-client-secret" && f.confidence === "generic")).toBe(true);
+  });
+
+  it("does not flag a 64-char value shaped like a Bitbucket Client Secret without the keyword nearby", () => {
+    const value = "aB3fD1x9Qz".repeat(7).slice(0, 64).toLowerCase();
+    const findings = scanLine(line(`const unrelated_var = "${value}";`));
+    expect(findings.some((f) => f.ruleId === "bitbucket-client-secret")).toBe(false);
+  });
+
+  it("does not flag a Bitbucket Client Secret-shaped value that is one character short even with the keyword nearby", () => {
+    const value = "aB3fD1x9Qz".repeat(7).slice(0, 63).toLowerCase();
+    const findings = scanLine(line(`const bitbucket_client_secret = "${value}";`));
+    expect(findings.some((f) => f.ruleId === "bitbucket-client-secret")).toBe(false);
+  });
+
+  it("flags a Droneci Access Token-shaped value when the keyword 'droneci' is nearby", () => {
+    const value = "aB3fD1x9Qz".repeat(4).slice(0, 32).toLowerCase();
+    const findings = scanLine(line(`const droneci_access_token = "${value}";`));
+    expect(findings.some((f) => f.ruleId === "droneci-access-token" && f.confidence === "generic")).toBe(true);
+  });
+
+  it("does not flag a 32-char value shaped like a Droneci Access Token without the keyword nearby", () => {
+    const value = "aB3fD1x9Qz".repeat(4).slice(0, 32).toLowerCase();
+    const findings = scanLine(line(`const unrelated_var = "${value}";`));
+    expect(findings.some((f) => f.ruleId === "droneci-access-token")).toBe(false);
+  });
+
+  it("does not flag a Droneci Access Token-shaped value that is one character short even with the keyword nearby", () => {
+    const value = "aB3fD1x9Qz".repeat(4).slice(0, 31).toLowerCase();
+    const findings = scanLine(line(`const droneci_access_token = "${value}";`));
+    expect(findings.some((f) => f.ruleId === "droneci-access-token")).toBe(false);
+  });
+
+  it("flags a Beamer API Token-shaped value when the keyword 'beamer' is nearby", () => {
+    const value = "b_" + "aB3fD1x9Qz".repeat(5).slice(0, 44).toLowerCase();
+    const findings = scanLine(line(`const beamer_api_token = "${value}";`));
+    expect(findings.some((f) => f.ruleId === "beamer-api-token" && f.confidence === "generic")).toBe(true);
+  });
+
+  it("does not flag a b_-prefixed value shaped like a Beamer API Token without the keyword nearby", () => {
+    const value = "b_" + "aB3fD1x9Qz".repeat(5).slice(0, 44).toLowerCase();
+    const findings = scanLine(line(`const unrelated_var = "${value}";`));
+    expect(findings.some((f) => f.ruleId === "beamer-api-token")).toBe(false);
+  });
+
+  it("does not flag a Beamer API Token-shaped value that is one character short even with the keyword nearby", () => {
+    const value = "b_" + "aB3fD1x9Qz".repeat(5).slice(0, 43).toLowerCase();
+    const findings = scanLine(line(`const beamer_api_token = "${value}";`));
+    expect(findings.some((f) => f.ruleId === "beamer-api-token")).toBe(false);
+  });
+
   it("flags a generic high-entropy value assigned to a secret-like variable name", () => {
     const findings = scanLine(line(`const apiToken = "zT9pQ2xR7mK4vL8nW1sD6fH3jC0bA5eY";`));
     expect(findings.some((f) => f.ruleId === "generic-high-entropy-secret" && f.confidence === "generic")).toBe(

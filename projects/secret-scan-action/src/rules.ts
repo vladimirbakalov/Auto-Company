@@ -706,6 +706,39 @@ export const PATTERN_RULES: PatternRule[] = [
       /[\w.-]{0,50}?asana(?:[ \t\w.-]{0,20})[\s'"]{0,3}(?:=|>|:{1,3}=|\|\||:|=>|\?=|,)[`'"\s=]{0,5}([a-z0-9]{32})(?:[`'"\s;]|\\[nr]|$)/gi,
     confidence: "generic",
   },
+  {
+    id: "bitbucket-client-secret",
+    description: "Bitbucket Client Secret (contextual)",
+    // Same keyword-proximity shape and "bitbucket" keyword gate as
+    // bitbucket-client-id above, but a distinct value shape (64-char
+    // alnum/=/_/- value) distinguishes it as its own rule — same
+    // two-rules-one-keyword pattern used for discord and asana above.
+    // "generic" tier for the same reason as the rest of this class.
+    build: () =>
+      /[\w.-]{0,50}?bitbucket(?:[ \t\w.-]{0,20})[\s'"]{0,3}(?:=|>|:{1,3}=|\|\||:|=>|\?=|,)[`'"\s=]{0,5}([a-z0-9=_-]{64})(?:[`'"\s;]|\\[nr]|$)/gi,
+    confidence: "generic",
+  },
+  {
+    id: "droneci-access-token",
+    description: "Droneci Access Token (contextual)",
+    // Same keyword-proximity shape. Value is a bare 32-char lowercase-alnum
+    // value, gated on "droneci" appearing before the assignment. "generic"
+    // tier for the same reason as the rest of this class.
+    build: () =>
+      /[\w.-]{0,50}?droneci(?:[ \t\w.-]{0,20})[\s'"]{0,3}(?:=|>|:{1,3}=|\|\||:|=>|\?=|,)[`'"\s=]{0,5}([a-z0-9]{32})(?:[`'"\s;]|\\[nr]|$)/gi,
+    confidence: "generic",
+  },
+  {
+    id: "beamer-api-token",
+    description: "Beamer API Token (contextual)",
+    // Same keyword-proximity shape, gated on "beamer" appearing before the
+    // assignment. Value has a fixed "b_" literal prefix plus a 44-char
+    // alnum/=/_/- body, captured together as one group. "generic" tier for
+    // the same reason as the rest of this class.
+    build: () =>
+      /[\w.-]{0,50}?beamer(?:[ \t\w.-]{0,20})[\s'"]{0,3}(?:=|>|:{1,3}=|\|\||:|=>|\?=|,)[`'"\s=]{0,5}(b_[a-z0-9=_-]{44})(?:[`'"\s;]|\\[nr]|$)/gi,
+    confidence: "generic",
+  },
 ];
 
 /**
