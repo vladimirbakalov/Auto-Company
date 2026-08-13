@@ -756,6 +756,62 @@ describe("scanLine — true positives (known-leaked-secret patterns)", () => {
     expect(findings.some((f) => f.ruleId === "coinbase-access-token")).toBe(false);
   });
 
+  it("flags a Contentful-shaped value when the keyword 'contentful' is nearby", () => {
+    const value = "aB3fD1x9Qz".repeat(5).slice(0, 43).toLowerCase();
+    const findings = scanLine(line(`const contentful_token = "${value}";`));
+    expect(findings.some((f) => f.ruleId === "contentful-delivery-api-token" && f.confidence === "generic")).toBe(
+      true,
+    );
+  });
+
+  it("does not flag a 43-char value shaped like a Contentful token without the keyword nearby", () => {
+    const value = "aB3fD1x9Qz".repeat(5).slice(0, 43).toLowerCase();
+    const findings = scanLine(line(`const unrelated_var = "${value}";`));
+    expect(findings.some((f) => f.ruleId === "contentful-delivery-api-token")).toBe(false);
+  });
+
+  it("does not flag a Contentful-shaped value that is one character short even with the keyword nearby", () => {
+    const value = "aB3fD1x9Qz".repeat(5).slice(0, 42).toLowerCase();
+    const findings = scanLine(line(`const contentful_token = "${value}";`));
+    expect(findings.some((f) => f.ruleId === "contentful-delivery-api-token")).toBe(false);
+  });
+
+  it("flags a HubSpot-shaped value when the keyword 'hubspot' is nearby", () => {
+    const value = "12345678-9abc-def0-1234-56789abcdef0";
+    const findings = scanLine(line(`const hubspot_key = "${value}";`));
+    expect(findings.some((f) => f.ruleId === "hubspot-api-key" && f.confidence === "generic")).toBe(true);
+  });
+
+  it("does not flag a UUID-shaped value without the 'hubspot' keyword nearby", () => {
+    const value = "12345678-9abc-def0-1234-56789abcdef0";
+    const findings = scanLine(line(`const unrelated_var = "${value}";`));
+    expect(findings.some((f) => f.ruleId === "hubspot-api-key")).toBe(false);
+  });
+
+  it("does not flag a HubSpot-shaped value that is malformed even with the keyword nearby", () => {
+    const value = "12345678-9abc-def0-1234-56789abcdef";
+    const findings = scanLine(line(`const hubspot_key = "${value}";`));
+    expect(findings.some((f) => f.ruleId === "hubspot-api-key")).toBe(false);
+  });
+
+  it("flags a Zendesk-shaped value when the keyword 'zendesk' is nearby", () => {
+    const value = "aB3fD1x9Qz".repeat(4).slice(0, 40).toLowerCase();
+    const findings = scanLine(line(`const zendesk_key = "${value}";`));
+    expect(findings.some((f) => f.ruleId === "zendesk-secret-key" && f.confidence === "generic")).toBe(true);
+  });
+
+  it("does not flag a 40-char value shaped like a Zendesk key without the keyword nearby", () => {
+    const value = "aB3fD1x9Qz".repeat(4).slice(0, 40).toLowerCase();
+    const findings = scanLine(line(`const unrelated_var = "${value}";`));
+    expect(findings.some((f) => f.ruleId === "zendesk-secret-key")).toBe(false);
+  });
+
+  it("does not flag a Zendesk-shaped value that is one character short even with the keyword nearby", () => {
+    const value = "aB3fD1x9Qz".repeat(4).slice(0, 39).toLowerCase();
+    const findings = scanLine(line(`const zendesk_key = "${value}";`));
+    expect(findings.some((f) => f.ruleId === "zendesk-secret-key")).toBe(false);
+  });
+
   it("flags a generic high-entropy value assigned to a secret-like variable name", () => {
     const findings = scanLine(line(`const apiToken = "zT9pQ2xR7mK4vL8nW1sD6fH3jC0bA5eY";`));
     expect(findings.some((f) => f.ruleId === "generic-high-entropy-secret" && f.confidence === "generic")).toBe(

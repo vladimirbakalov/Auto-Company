@@ -33388,6 +33388,35 @@ exports.PATTERN_RULES = [
         build: () => /[\w.-]{0,50}?coinbase(?:[ \t\w.-]{0,20})[\s'"]{0,3}(?:=|>|:{1,3}=|\|\||:|=>|\?=|,)[`'"\s=]{0,5}([a-z0-9_-]{64})(?:[`'"\s;]|\\[nr]|$)/gi,
         confidence: "generic",
     },
+    {
+        id: "contentful-delivery-api-token",
+        description: "Contentful Delivery API Token (contextual)",
+        // Same keyword-proximity shape. Value is a bare 43-char
+        // alnum-with-`=`/`_`/`-` string, gated on "contentful" appearing before
+        // the assignment. "generic" tier for the same reason as the rest of
+        // this class.
+        build: () => /[\w.-]{0,50}?contentful(?:[ \t\w.-]{0,20})[\s'"]{0,3}(?:=|>|:{1,3}=|\|\||:|=>|\?=|,)[`'"\s=]{0,5}([a-z0-9=_-]{43})(?:[`'"\s;]|\\[nr]|$)/gi,
+        confidence: "generic",
+    },
+    {
+        id: "hubspot-api-key",
+        description: "HubSpot API Key (contextual)",
+        // Same keyword-proximity shape, but a UUID-shaped value (HubSpot's own
+        // format) rather than a bare alnum run. Gated on "hubspot" appearing
+        // before the assignment. "generic" tier for the same reason as the
+        // rest of this class.
+        build: () => /[\w.-]{0,50}?hubspot(?:[ \t\w.-]{0,20})[\s'"]{0,3}(?:=|>|:{1,3}=|\|\||:|=>|\?=|,)[`'"\s=]{0,5}([0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})(?:[`'"\s;]|\\[nr]|$)/gi,
+        confidence: "generic",
+    },
+    {
+        id: "zendesk-secret-key",
+        description: "Zendesk Secret Key (contextual)",
+        // Same keyword-proximity shape. Value is a bare 40-char lowercase-alnum
+        // string, gated on "zendesk" appearing before the assignment. "generic"
+        // tier for the same reason as the rest of this class.
+        build: () => /[\w.-]{0,50}?zendesk(?:[ \t\w.-]{0,20})[\s'"]{0,3}(?:=|>|:{1,3}=|\|\||:|=>|\?=|,)[`'"\s=]{0,5}([a-z0-9]{40})(?:[`'"\s;]|\\[nr]|$)/gi,
+        confidence: "generic",
+    },
 ];
 /**
  * Variable-name fragment that makes a high-entropy value worth flagging.
