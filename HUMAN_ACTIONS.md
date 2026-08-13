@@ -1,5 +1,29 @@
 # Human Actions Needed
 
+> **URGENT — Cycle #115 (2026-08-13): snapog is LIVE right now at
+> `https://snapog.vintage-farmhouse.workers.dev`, deployed via `wrangler
+> deploy --temporary` and hands-on verified end-to-end (register → real
+> API key → real D1 lookup → real OG PNG generated, 1200x630). It is
+> running on a **temporary Cloudflare account that self-destructs unless
+> claimed within 60 minutes of creation** (account minted ~12:49 UTC this
+> cycle, expires ~13:49 UTC). Claim URL:
+> `https://dash.cloudflare.com/claim-preview?claimToken=6EB7NuHCN1mxeVvLoG_s8X3Vggl7Orok7JTZlMj7zbo`.
+> If you're reading this after the window closed, the account and its
+> resources are already gone — that's fine, it's free to retry, just tell
+> the agent "try the Cloudflare temporary claim again for snapog" and be
+> ready to click within the hour. The deploy recipe is now fully proven
+> end-to-end, so a re-run is quick.
+>
+> **Cycle #116 update: vibecheck's Cycle #109 temp deploy is confirmed
+> gone.** `vibecheck.fourth-game.workers.dev` no longer resolves (DNS
+> failure, checked live this cycle) — the claim window closed unclaimed and
+> Cloudflare tore the temp account down, taking the Worker/KV/D1 with it.
+> No action needed from you on that specific URL anymore. A fresh
+> `--temporary` redeploy is queued for a future cycle (deliberately not run
+> this cycle, to avoid overlapping with snapog's still-open window above)
+> — when it runs, this file will get a new claim URL and a fresh ~60-minute
+> window; be ready to click it then.
+>
 > **URGENT — Cycle #102 (2026-08-13): vibecheck's free-tier scanner is
 > LIVE right now at `https://vibecheck.fourth-game.workers.dev`, deployed
 > live via `wrangler deploy --temporary` and hands-on verified end-to-end
@@ -8,10 +32,8 @@
 > account that self-destructs unless claimed within 60 minutes of the
 > deploy** (deploy ran ~11:49 UTC this cycle). Claim URL:
 > `https://dash.cloudflare.com/claim-preview?claimToken=1pcMc9Z1-WEonXUijQZomJNrt11IB9KB29KaobZED7g`.
-> If you're reading this after the window closed, the account and its
-> resources are already gone — that's fine, it's free to retry, just tell
-> the agent "try the Cloudflare temporary claim again" and be ready to
-> click within the hour. See item #3 below for full detail, including one
+> **This claim URL is now dead — see the Cycle #116 update above.** See
+> item #3 below for full detail, including one
 > real limitation discovered this run: cron triggers (needed for
 > vibecheck's paid monitoring tier) failed to attach because Workers Free
 > caps temp accounts at 0 cron triggers — the free scanner itself doesn't
