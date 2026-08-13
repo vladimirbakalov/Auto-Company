@@ -1,0 +1,106 @@
+name: Check Standalone Repo Drift
+
+# pr-summary-action, secret-scan-action, and secretguard-mcp are published as
+# standalone repos (that's what `uses: owner/repo@v1` / `npx github:owner/repo`
+# actually resolve to). Their src/ is copied from projects/<name>/ in this
+# monorepo by hand today. Twice now (Cycle #137, #138) a real fix landed here
+# and silently never made it to the published repo. This job makes that drift
+# visible automatically instead of relying on a manual diff sweep.
+#
+# Read-only by design: it only clones the public standalone repos and diffs,
+# it never pushes. A drifting check just fails the run — see
+# docs/devops/standalone-repo-sync-runbook.md for how to reconcile.
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - "projects/pr-summary-action/**"
+      - "projects/secret-scan-action/**"
+      - "projects/secretguard-mcp/**"
+  schedule:
+    - cron: "0 6 * * 1" # weekly, in case the standalone repo itself drifted
+  workflow_dispatch: {}
+
+permissions:
+  contents: read
+
+jobs:
+  drift-check:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Diff each standalone repo against its monorepo copy
+        run: |
+          set -uo pipefail
+
+          OWNER="vladimirbakalov"
+          DRIFT_FOUND=0
+          SUMMARY="${GITHUB_STEP_SUMMARY:-/dev/stdout}"
+
+          # name -> has a tracked dist/index.js that's the actually-executed artifact
+          declare -A HAS_DIST=(
+            [pr-summary-action]=1
+            [secret-scan-action]=1
+            [secretguard-mcp]=0
+          )
+
+          echo "# Standalone repo drift check" >> "$SUMMARY"
+
+          for name in "${!HAS_DIST[@]}"; do
+            local_dir="projects/${name}"
+            remote_url="https://github.com/${OWNER}/${name}.git"
+            clone_dir="$(mktemp -d)"
+
+            echo "## ${name}" >> "$SUMMARY"
+
+            if ! git clone --depth 1 --quiet "$remote_url" "$clone_dir"; then
+              echo "- clone failed" >> "$SUMMARY"
+              DRIFT_FOUND=1
+              continue
+            fi
+
+            if [ -d "$local_dir/src" ]; then
+              if ! diff -rq "$local_dir/src" "$clone_dir/src" > /tmp/"${name}"_src.diff 2>&1; then
+                echo "- src/ differs from monorepo:" >> "$SUMMARY"
+                sed 's/^/      /' /tmp/"${name}"_src.diff >> "$SUMMARY"
+                DRIFT_FOUND=1
+              else
+                echo "- src/ matches" >> "$SUMMARY"
+              fi
+            fi
+
+            if [ "${HAS_DIST[$name]}" = "1" ] && [ -f "$local_dir/dist/index.js" ]; then
+              if ! diff -q "$local_dir/dist/index.js" "$clone_dir/dist/index.js" > /dev/null 2>&1; then
+                echo "- dist/index.js differs (this is the actually-executed artifact for uses: consumers)" >> "$SUMMARY"
+                DRIFT_FOUND=1
+              else
+                echo "- dist/index.js matches" >> "$SUMMARY"
+              fi
+            fi
+
+            main_sha="$(git -C "$clone_dir" rev-parse HEAD)"
+            v1_sha="$(git ls-remote "$remote_url" 'refs/tags/v1^{}' | cut -f1)"
+            if [ -z "$v1_sha" ]; then
+              v1_sha="$(git ls-remote "$remote_url" 'refs/tags/v1' | cut -f1)"
+            fi
+
+            if [ -z "$v1_sha" ]; then
+              echo "- no v1 tag found on the standalone repo" >> "$SUMMARY"
+              DRIFT_FOUND=1
+            elif [ "$v1_sha" != "$main_sha" ]; then
+              behind="$(git -C "$clone_dir" rev-list --count "${v1_sha}..${main_sha}" 2>/dev/null || echo unknown)"
+              echo "- v1 tag ($v1_sha) is ${behind} commit(s) behind main ($main_sha) — informational, confirm nothing breaking is queued before fast-forwarding" >> "$SUMMARY"
+            else
+              echo "- v1 tag matches main" >> "$SUMMARY"
+            fi
+
+            rm -rf "$clone_dir"
+          done
+
+          if [ "$DRIFT_FOUND" = "1" ]; then
+            echo "" >> "$SUMMARY"
+            echo "Drift detected — see docs/devops/standalone-repo-sync-runbook.md for remediation steps." >> "$SUMMARY"
+            exit 1
+          fi
