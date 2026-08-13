@@ -167,16 +167,20 @@ Once this package is published to npm, the `args` above can drop to
 
 A prebuilt [MCP Bundle](https://github.com/modelcontextprotocol/mcpb) is
 attached to the
-[`v0.1.0-mcpb` release](https://github.com/vladimirbakalov/secretguard-mcp/releases/tag/v0.1.0-mcpb) —
-download `secretguard-mcp-0.1.0.mcpb` and open it in Claude Desktop (or any
+[`v0.1.4-mcpb` release](https://github.com/vladimirbakalov/secretguard-mcp/releases/tag/v0.1.4-mcpb) —
+download `secretguard-mcp-0.1.4.mcpb` and open it in Claude Desktop (or any
 other MCPB-compatible client) for a one-click local install, no `npx`/Node
 setup required on the client side. Rebuild it yourself with
 `npm run package:mcpb` (see `scripts/build-mcpb.sh`).
 
 This same `.mcpb` release asset is what `server.json` at the repo root points
-at for the [official MCP Registry](https://registry.modelcontextprotocol.io/)
-— publishing there is prepared but not yet done, since it requires a one-time
-interactive `mcp-publisher login github` device-flow authorization.
+at for the [official MCP Registry](https://registry.modelcontextprotocol.io/) —
+`secretguard-mcp` is published and listed there as
+[`io.github.vladimirbakalov/secretguard-mcp`](https://registry.modelcontextprotocol.io/v0/servers?search=secretguard),
+so MCP clients that browse the official registry can discover and install it
+directly, in addition to the `npx`/`.mcpb` paths above. Publishing runs
+unattended in CI (`.github/workflows/publish-mcp.yml`) via `mcp-publisher
+login github-oidc` on every `v*-mcpb` tag push — no interactive login step.
 
 ## Security notes
 
