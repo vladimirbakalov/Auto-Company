@@ -199,6 +199,20 @@ describe('snapog routes', () => {
     expect(res.headers.get('content-type')).toContain('text/html');
   });
 
+  it('landingPage() escapes the host before echoing it into the code sample', async () => {
+    // rawHost is derived from the incoming request's URL — ultimately the
+    // Host header, which a raw HTTP client (unlike a browser) can set to an
+    // arbitrary value — so pages.ts:402-405 explicitly documents it as
+    // untrusted and escapes it. No test exercised that call at all: this
+    // guards the same class of reflected-XSS regression the tier-param and
+    // email tests above already cover, for the one remaining unescaped-input
+    // path into landingPage().
+    const { landingPage } = await import('../src/dashboard/pages');
+    const html = landingPage('"><script>alert(document.cookie)</script>', 'test-nonce');
+    expect(html).not.toContain('<script>alert(document.cookie)</script>');
+    expect(html).toContain('&lt;script&gt;alert(document.cookie)&lt;/script&gt;');
+  });
+
   it('GET / sets a nonce-based CSP header matching the inline script tag', async () => {
     // CSP is nonce-based (script-src has no 'unsafe-inline') since the page
     // ships its interactivity as an inline <script>: the header's nonce must
