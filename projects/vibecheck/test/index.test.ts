@@ -1267,6 +1267,29 @@ describe('GET /dashboard', () => {
     expect(html).not.toContain('Still gathering response-time data');
   });
 
+  // dashboardMonitor (used by every test above) always has muted_until:
+  // null, so the mute-toggle button label and mute-status text (pages.ts)
+  // only ever rendered their "not muted" branch ("Pause alerts for 24h" /
+  // "Alerts are active."). The isMuted()-true branch — "Resume alerts" /
+  // "Alerts paused until <ts>" — had no coverage at the route level.
+  it('renders the muted state when the monitor has an active mute', async () => {
+    const mutedMonitor: MonitorRow = { ...dashboardMonitor, muted_until: '2099-01-01T00:00:00.000Z' };
+    const env = {
+      DB: fakeDashboardDb({ user: dashboardUser, monitor: mutedMonitor, alerts: [] }),
+    } as Env;
+
+    const res = await app.request(
+      '/dashboard',
+      { headers: { Authorization: 'Bearer fake-api-key' } },
+      env
+    );
+
+    expect(res.status).toBe(200);
+    const html = await res.text();
+    expect(html).toContain('data-muted="true">Resume alerts</button>');
+    expect(html).toContain('Alerts paused until');
+  });
+
   // Route-level coverage for the security-drift live-probe branch (qa-bach
   // review, cycle 11: this branch was previously only exercised indirectly
   // through diffSecurityFindings's own unit tests in dashboard.test.ts, never
