@@ -568,6 +568,14 @@ describe("scanLine — true positives (known-leaked-secret patterns)", () => {
     expect(findings.some((f) => f.ruleId === "circleci-project-access-token")).toBe(false);
   });
 
+  it("flags a Salesforce Marketing Cloud client secret", () => {
+    const token = `SFMC_${"aB1cD2eF3".repeat(7).slice(0, 59)}`;
+    const findings = scanLine(line(`const SFMC_CLIENT_SECRET = "${token}";`));
+    expect(
+      findings.some((f) => f.ruleId === "salesforce-marketing-cloud-client-secret" && f.confidence === "high"),
+    ).toBe(true);
+  });
+
   it("flags an age encryption secret key", () => {
     const body = "QPZRY9X8GF2TVDW0S3JN54KHCE6MUA7L".repeat(2).slice(0, 58);
     const findings = scanLine(line(`const AGE_KEY = "AGE-SECRET-KEY-1${body}";`));

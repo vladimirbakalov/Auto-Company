@@ -1677,6 +1677,16 @@ export const PATTERN_RULES: PatternRule[] = [
     // CCIPRJ_ project-scoped token prefix.
     build: () => /\bCCIPRJ_[1-9A-HJ-NP-Za-km-z]{20,24}_[0-9a-f]{40}\b/g,
   },
+  {
+    id: "salesforce-marketing-cloud-client-secret",
+    description: "Salesforce Marketing Cloud (SFMC) OAuth client secret",
+    // Secrets generated after March 2026 begin with a fixed SFMC_ prefix,
+    // followed by 51 characters and an 8-character checksum (64 chars
+    // total including the prefix), per Salesforce's own rotation docs.
+    // Character set isn't documented explicitly; alnum is assumed,
+    // consistent with every other fixed-prefix token in this ruleset.
+    build: () => /\bSFMC_[A-Za-z0-9]{59}\b/g,
+  },
 ];
 
 /**
