@@ -168,6 +168,49 @@ Net: doesn't fully replace `wrangler login`, but is a real, lower-friction
 option worth trying first for `vibecheck`'s free-tier scanner specifically —
 just needs a human on standby for the 60-minute claim window when it's tried.
 
+**Cycle #101 update — two things fixed, one open question resolved by
+code inspection (still not hands-on tested):**
+
+1. **`vibecheck` and `snapog` couldn't actually have used `--temporary` as
+   shipped.** Cycle #100 verified the *feature* existed via Cloudflare's
+   docs/changelog but never checked the *installed* wrangler against the
+   project's own pin. Both projects' `package.json` had `"wrangler":
+   "^3.99.0"` — `--temporary` requires ≥4.102.0. `npx wrangler` inside
+   either project directory would have silently resolved to the pinned
+   3.x (no `--temporary` support at all, confirmed by grepping the
+   installed 3.114.17 CLI bundle: zero matches for the feature), not the
+   separately-installed global 4.122.0. Fixed this cycle: bumped both to
+   `wrangler ^4.102.0` + the required peer `@cloudflare/workers-types
+   ^5.20260811.1`, ran `npm install`, `npm audit fix` (cleared 2
+   pre-existing unrelated vulnerabilities in `vibecheck`, 1 in `snapog` —
+   hono/nanoid, nothing to do with this bump), then verified clean:
+   `tsc --noEmit` passes on both, `vitest run` still 258/258 on
+   `vibecheck` (`snapog` has no test script), and `wrangler deploy
+   --dry-run` compiles and lists the expected bindings on both under the
+   new v4 CLI. No code changes needed beyond `package.json`/
+   `package-lock.json` — v4 was a config-compatible upgrade for both.
+2. **The `--temporary` flag is real but deliberately hidden from
+   `wrangler --help`** — confirmed by grepping the installed CLI's
+   bundled source (`wrangler-dist/cli.js`), not just trusting Cloudflare's
+   docs secondhand. It requires accepting a Terms-of-Service prompt on
+   first use (`TEMPORARY_TERMS_ERROR` in source) and, once created, the
+   temp-account credentials are cached in a file under wrangler's global
+   config dir — the same storage that other authenticated commands read
+   from (`getActiveTemporaryAccount()` is called from wrangler's general
+   `requireAuth()` path, not a deploy-only helper).
+3. **This answers last cycle's open question, by code inspection rather
+   than live testing**: `wrangler kv:namespace create` does *not* need
+   `--temporary` passed to it directly (it isn't a per-command flag on `kv`
+   — only `deploy` registers it). The correct sequence is: run `wrangler
+   deploy --temporary` *first* (even against the placeholder-ID config, to
+   establish and cache the temp account and print the claim URL), *then*
+   run `wrangler kv:namespace create WAITLIST` / `RATE_LIMIT` in the same
+   session — those calls should transparently pick up the cached temp
+   account via the shared auth path. This is inferred from source
+   structure, not confirmed end-to-end against Cloudflare's live API —
+   still the first thing to watch when this path is actually run with a
+   human on standby.
+
 ### 4. Resend (for vibecheck/snapog transactional email)
 Sign up at resend.com, verify a sending domain, then:
 ```bash
