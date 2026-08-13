@@ -1212,6 +1212,34 @@ describe('GET /dashboard', () => {
     expect(html).toContain('No monitor yet');
   });
 
+  // renderAlerts/alertResolutionText (pages.ts) were only ever exercised
+  // with alerts: [] by the tests above, so the "has alerts" branch — type
+  // label lookup, and the Ongoing/Resolved/no-resolution-text distinction
+  // per alert type — had no coverage at all.
+  it('renders alert rows with type labels and resolution state', async () => {
+    const alerts: AlertRow[] = [
+      { id: 1, monitor_id: 5, type: 'down', fired_at: '2026-08-12T00:00:00.000Z', resolved_at: null, notified_at: null, details: null },
+      { id: 2, monitor_id: 5, type: 'down', fired_at: '2026-08-11T00:00:00.000Z', resolved_at: '2026-08-11T01:00:00.000Z', notified_at: null, details: null },
+      { id: 3, monitor_id: 5, type: 'recovered', fired_at: '2026-08-11T01:00:00.000Z', resolved_at: null, notified_at: null, details: null },
+    ];
+    const env = {
+      DB: fakeDashboardDb({ user: dashboardUser, monitor: dashboardMonitor, alerts }),
+    } as Env;
+
+    const res = await app.request(
+      '/dashboard',
+      { headers: { Authorization: 'Bearer fake-api-key' } },
+      env
+    );
+
+    expect(res.status).toBe(200);
+    const html = await res.text();
+    expect(html).toContain('Went down');
+    expect(html).toContain('Ongoing');
+    expect(html).toContain('Resolved');
+    expect(html).toContain('Back up');
+  });
+
   // Route-level coverage for the security-drift live-probe branch (qa-bach
   // review, cycle 11: this branch was previously only exercised indirectly
   // through diffSecurityFindings's own unit tests in dashboard.test.ts, never
@@ -1277,6 +1305,34 @@ describe('GET /dashboard', () => {
       expect(res.status).toBe(200);
       const html = await res.text();
       expect(html).toContain('No changes since your last scan');
+    });
+
+    // The fourth SecurityDriftSummary state ('new_findings' — renderSecurityDrift
+    // in pages.ts) had no coverage: only no_baseline/check_failed/no_changes were
+    // exercised above. Omit all hardening headers so the live probe reports
+    // findings beyond monitorWithBaseline's single stored CORS finding.
+    it('lists new findings when the live probe diverges from the stored baseline', async () => {
+      global.fetch = vi.fn(async (input: RequestInit | string | URL) => {
+        const url = String(input);
+        if (url === 'https://myapp.example.com/') {
+          return streamedResponse('<html></html>', {
+            status: 200,
+            headers: new Headers({ 'access-control-allow-origin': '*' }),
+          });
+        }
+        return streamedResponse('not found', { status: 404 });
+      }) as unknown as typeof fetch;
+
+      const env = {
+        DB: fakeDashboardDb({ user: dashboardUser, monitor: monitorWithBaseline, alerts: [] }),
+      } as Env;
+
+      const res = await app.request('/dashboard', { headers: { Authorization: 'Bearer fake-api-key' } }, env);
+
+      expect(res.status).toBe(200);
+      const html = await res.text();
+      expect(html).toContain('new finding');
+      expect(html).toContain('since monitoring started');
     });
   });
 });
