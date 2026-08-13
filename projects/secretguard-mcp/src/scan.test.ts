@@ -700,6 +700,62 @@ describe("scanLine — true positives (known-leaked-secret patterns)", () => {
     expect(findings.some((f) => f.ruleId === "datadog-access-token")).toBe(false);
   });
 
+  it("flags a Cloudflare-API-key-shaped value when the keyword 'cloudflare' is nearby", () => {
+    const value = "aB3fD1x9Qz".repeat(4).slice(0, 40).toLowerCase();
+    const findings = scanLine(line(`const cloudflare_api_key = "${value}";`));
+    expect(findings.some((f) => f.ruleId === "cloudflare-api-key" && f.confidence === "generic")).toBe(true);
+  });
+
+  it("does not flag a 40-char value shaped like a Cloudflare API key without the keyword nearby", () => {
+    const value = "aB3fD1x9Qz".repeat(4).slice(0, 40).toLowerCase();
+    const findings = scanLine(line(`const unrelated_var = "${value}";`));
+    expect(findings.some((f) => f.ruleId === "cloudflare-api-key")).toBe(false);
+  });
+
+  it("does not flag a Cloudflare-API-key-shaped value that is one character short even with the keyword nearby", () => {
+    const value = "aB3fD1x9Qz".repeat(4).slice(0, 39).toLowerCase();
+    const findings = scanLine(line(`const cloudflare_api_key = "${value}";`));
+    expect(findings.some((f) => f.ruleId === "cloudflare-api-key")).toBe(false);
+  });
+
+  it("flags a Cloudflare-Global-API-key-shaped value when the keyword 'cloudflare' is nearby", () => {
+    const value = "b".repeat(37);
+    const findings = scanLine(line(`const cloudflare_global_key = "${value}";`));
+    expect(findings.some((f) => f.ruleId === "cloudflare-global-api-key" && f.confidence === "generic")).toBe(
+      true,
+    );
+  });
+
+  it("does not flag a 37-char hex value shaped like a Cloudflare Global API key without the keyword nearby", () => {
+    const value = "b".repeat(37);
+    const findings = scanLine(line(`const unrelated_var = "${value}";`));
+    expect(findings.some((f) => f.ruleId === "cloudflare-global-api-key")).toBe(false);
+  });
+
+  it("does not flag a Cloudflare-Global-API-key-shaped value that is one character short even with the keyword nearby", () => {
+    const value = "b".repeat(36);
+    const findings = scanLine(line(`const cloudflare_global_key = "${value}";`));
+    expect(findings.some((f) => f.ruleId === "cloudflare-global-api-key")).toBe(false);
+  });
+
+  it("flags a Coinbase-shaped value when the keyword 'coinbase' is nearby", () => {
+    const value = "aB3fD1x9Qz".repeat(7).slice(0, 64).toLowerCase();
+    const findings = scanLine(line(`const coinbase_token = "${value}";`));
+    expect(findings.some((f) => f.ruleId === "coinbase-access-token" && f.confidence === "generic")).toBe(true);
+  });
+
+  it("does not flag a 64-char value shaped like a Coinbase token without the keyword nearby", () => {
+    const value = "aB3fD1x9Qz".repeat(7).slice(0, 64).toLowerCase();
+    const findings = scanLine(line(`const unrelated_var = "${value}";`));
+    expect(findings.some((f) => f.ruleId === "coinbase-access-token")).toBe(false);
+  });
+
+  it("does not flag a Coinbase-shaped value that is one character short even with the keyword nearby", () => {
+    const value = "aB3fD1x9Qz".repeat(7).slice(0, 63).toLowerCase();
+    const findings = scanLine(line(`const coinbase_token = "${value}";`));
+    expect(findings.some((f) => f.ruleId === "coinbase-access-token")).toBe(false);
+  });
+
   it("flags a generic high-entropy value assigned to a secret-like variable name", () => {
     const findings = scanLine(line(`const apiToken = "zT9pQ2xR7mK4vL8nW1sD6fH3jC0bA5eY";`));
     expect(findings.some((f) => f.ruleId === "generic-high-entropy-secret" && f.confidence === "generic")).toBe(

@@ -33357,6 +33357,37 @@ exports.PATTERN_RULES = [
         build: () => /[\w.-]{0,50}?datadog(?:[ \t\w.-]{0,20})[\s'"]{0,3}(?:=|>|:{1,3}=|\|\||:|=>|\?=|,)[`'"\s=]{0,5}([a-z0-9]{40})(?:[`'"\s;]|\\[nr]|$)/gi,
         confidence: "generic",
     },
+    {
+        id: "cloudflare-api-key",
+        description: "Cloudflare API Key (contextual)",
+        // Same keyword-proximity shape as the rest of this class. Value is a
+        // bare 40-char lowercase-alnum-with-dashes/underscores string, gated on
+        // "cloudflare" appearing before the assignment. "generic" tier: a
+        // 40-char value near the word "cloudflare" could still be a config ID,
+        // hash, or unrelated token.
+        build: () => /[\w.-]{0,50}?cloudflare(?:[ \t\w.-]{0,20})[\s'"]{0,3}(?:=|>|:{1,3}=|\|\||:|=>|\?=|,)[`'"\s=]{0,5}([a-z0-9_-]{40})(?:[`'"\s;]|\\[nr]|$)/gi,
+        confidence: "generic",
+    },
+    {
+        id: "cloudflare-global-api-key",
+        description: "Cloudflare Global API Key (contextual)",
+        // Same keyword-proximity shape and same "cloudflare" keyword gate as
+        // cloudflare-api-key above, but a distinct value shape (37-char hex)
+        // matching the Global API Key format upstream distinguishes as its own
+        // rule. "generic" tier for the same reason as the rest of this class.
+        build: () => /[\w.-]{0,50}?cloudflare(?:[ \t\w.-]{0,20})[\s'"]{0,3}(?:=|>|:{1,3}=|\|\||:|=>|\?=|,)[`'"\s=]{0,5}([a-f0-9]{37})(?:[`'"\s;]|\\[nr]|$)/gi,
+        confidence: "generic",
+    },
+    {
+        id: "coinbase-access-token",
+        description: "Coinbase Access Token (contextual)",
+        // Same keyword-proximity shape. Value is a bare 64-char
+        // lowercase-alnum-with-dashes/underscores string, gated on "coinbase"
+        // appearing before the assignment. "generic" tier for the same reason
+        // as the rest of this class.
+        build: () => /[\w.-]{0,50}?coinbase(?:[ \t\w.-]{0,20})[\s'"]{0,3}(?:=|>|:{1,3}=|\|\||:|=>|\?=|,)[`'"\s=]{0,5}([a-z0-9_-]{64})(?:[`'"\s;]|\\[nr]|$)/gi,
+        confidence: "generic",
+    },
 ];
 /**
  * Variable-name fragment that makes a high-entropy value worth flagging.
