@@ -502,6 +502,39 @@ export const PATTERN_RULES: PatternRule[] = [
       /[\w.-]{0,50}?adobe(?:[ \t\w.-]{0,20})[\s'"]{0,3}(?:=|>|:{1,3}=|\|\||:|=>|\?=|,)[`'"\s=]{0,5}([a-f0-9]{32})(?:[`'"\s;]|\\[nr]|$)/gi,
     confidence: "generic",
   },
+  {
+    id: "algolia-api-key",
+    description: "Algolia API Key (contextual)",
+    // Same keyword-proximity shape as adafruit-api-key/airtable-api-key/
+    // discord-api-token/adobe-client-id, sourced from the same cached
+    // upstream regex skeleton. Value is a bare 32-char lowercase-alnum
+    // string, gated on "algolia" appearing before the assignment.
+    // "generic" tier: a 32-char value near the word "algolia" could still
+    // be a config ID, hash, or unrelated token.
+    build: () =>
+      /[\w.-]{0,50}?algolia(?:[ \t\w.-]{0,20})[\s'"]{0,3}(?:=|>|:{1,3}=|\|\||:|=>|\?=|,)[`'"\s=]{0,5}([a-z0-9]{32})(?:[`'"\s;]|\\[nr]|$)/gi,
+    confidence: "generic",
+  },
+  {
+    id: "codecov-access-token",
+    description: "Codecov Access Token (contextual)",
+    // Same keyword-proximity shape. Value is a bare 32-char lowercase-alnum
+    // string, gated on "codecov" appearing before the assignment.
+    // "generic" tier for the same reason as the other rules in this class.
+    build: () =>
+      /[\w.-]{0,50}?codecov(?:[ \t\w.-]{0,20})[\s'"]{0,3}(?:=|>|:{1,3}=|\|\||:|=>|\?=|,)[`'"\s=]{0,5}([a-z0-9]{32})(?:[`'"\s;]|\\[nr]|$)/gi,
+    confidence: "generic",
+  },
+  {
+    id: "datadog-access-token",
+    description: "Datadog Access Token (contextual)",
+    // Same keyword-proximity shape. Value is a bare 40-char lowercase-alnum
+    // string, gated on "datadog" appearing before the assignment.
+    // "generic" tier for the same reason as the other rules in this class.
+    build: () =>
+      /[\w.-]{0,50}?datadog(?:[ \t\w.-]{0,20})[\s'"]{0,3}(?:=|>|:{1,3}=|\|\||:|=>|\?=|,)[`'"\s=]{0,5}([a-z0-9]{40})(?:[`'"\s;]|\\[nr]|$)/gi,
+    confidence: "generic",
+  },
 ];
 
 /**

@@ -646,6 +646,60 @@ describe("scanLine — true positives (known-leaked-secret patterns)", () => {
     expect(findings.some((f) => f.ruleId === "adobe-client-id")).toBe(false);
   });
 
+  it("flags an Algolia-shaped value when the keyword 'algolia' is nearby", () => {
+    const value = "aB3fD1x9Qz".repeat(4).slice(0, 32).toLowerCase();
+    const findings = scanLine(line(`const algolia_key = "${value}";`));
+    expect(findings.some((f) => f.ruleId === "algolia-api-key" && f.confidence === "generic")).toBe(true);
+  });
+
+  it("does not flag a 32-char value shaped like an Algolia key without the keyword nearby", () => {
+    const value = "aB3fD1x9Qz".repeat(4).slice(0, 32).toLowerCase();
+    const findings = scanLine(line(`const unrelated_var = "${value}";`));
+    expect(findings.some((f) => f.ruleId === "algolia-api-key")).toBe(false);
+  });
+
+  it("does not flag an Algolia-shaped value that is one character short even with the keyword nearby", () => {
+    const value = "aB3fD1x9Qz".repeat(4).slice(0, 31).toLowerCase();
+    const findings = scanLine(line(`const algolia_key = "${value}";`));
+    expect(findings.some((f) => f.ruleId === "algolia-api-key")).toBe(false);
+  });
+
+  it("flags a Codecov-shaped value when the keyword 'codecov' is nearby", () => {
+    const value = "aB3fD1x9Qz".repeat(4).slice(0, 32).toLowerCase();
+    const findings = scanLine(line(`const codecov_token = "${value}";`));
+    expect(findings.some((f) => f.ruleId === "codecov-access-token" && f.confidence === "generic")).toBe(true);
+  });
+
+  it("does not flag a 32-char value shaped like a Codecov token without the keyword nearby", () => {
+    const value = "aB3fD1x9Qz".repeat(4).slice(0, 32).toLowerCase();
+    const findings = scanLine(line(`const unrelated_var = "${value}";`));
+    expect(findings.some((f) => f.ruleId === "codecov-access-token")).toBe(false);
+  });
+
+  it("does not flag a Codecov-shaped value that is one character short even with the keyword nearby", () => {
+    const value = "aB3fD1x9Qz".repeat(4).slice(0, 31).toLowerCase();
+    const findings = scanLine(line(`const codecov_token = "${value}";`));
+    expect(findings.some((f) => f.ruleId === "codecov-access-token")).toBe(false);
+  });
+
+  it("flags a Datadog-shaped value when the keyword 'datadog' is nearby", () => {
+    const value = "aB3fD1x9Qz".repeat(4).slice(0, 40).toLowerCase();
+    const findings = scanLine(line(`const datadog_token = "${value}";`));
+    expect(findings.some((f) => f.ruleId === "datadog-access-token" && f.confidence === "generic")).toBe(true);
+  });
+
+  it("does not flag a 40-char value shaped like a Datadog token without the keyword nearby", () => {
+    const value = "aB3fD1x9Qz".repeat(4).slice(0, 40).toLowerCase();
+    const findings = scanLine(line(`const unrelated_var = "${value}";`));
+    expect(findings.some((f) => f.ruleId === "datadog-access-token")).toBe(false);
+  });
+
+  it("does not flag a Datadog-shaped value that is one character short even with the keyword nearby", () => {
+    const value = "aB3fD1x9Qz".repeat(4).slice(0, 39).toLowerCase();
+    const findings = scanLine(line(`const datadog_token = "${value}";`));
+    expect(findings.some((f) => f.ruleId === "datadog-access-token")).toBe(false);
+  });
+
   it("flags a generic high-entropy value assigned to a secret-like variable name", () => {
     const findings = scanLine(line(`const apiToken = "zT9pQ2xR7mK4vL8nW1sD6fH3jC0bA5eY";`));
     expect(findings.some((f) => f.ruleId === "generic-high-entropy-secret" && f.confidence === "generic")).toBe(
