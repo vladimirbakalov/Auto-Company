@@ -10,7 +10,7 @@
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { StdioServerTransport } from "@modelcontextprotocol/sdk/server/stdio.js";
 import { z } from "zod";
-import { scanForSecrets } from "./mcp-tool.js";
+import { scanForSecrets, toToolResponse } from "./mcp-tool.js";
 
 const server = new McpServer({
   name: "secretguard-mcp",
@@ -54,13 +54,7 @@ server.registerTool(
       openWorldHint: false,
     },
   },
-  async ({ code, filename }) => {
-    const result = scanForSecrets(code, filename);
-    return {
-      content: [{ type: "text" as const, text: result.summary }],
-      structuredContent: { findings: result.findings, summary: result.summary },
-    };
-  },
+  async ({ code, filename }) => toToolResponse(scanForSecrets(code, filename)),
 );
 
 async function main() {

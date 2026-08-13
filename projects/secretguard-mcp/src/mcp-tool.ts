@@ -60,6 +60,32 @@ export function scanForSecrets(code: string, filename?: string): ScanResult {
   return { findings, summary: buildSummary(findings, truncated) };
 }
 
+/**
+ * Shape returned by the `scan_for_secrets` MCP tool handler, per the MCP tool-result
+ * contract. `structuredContent` is intersected with `Record<string, unknown>` — not
+ * because callers should index into it dynamically, but because the MCP SDK's
+ * `CallToolResult` type requires a string index signature on `structuredContent`,
+ * which the plain `ScanResult` interface doesn't declare.
+ */
+export interface ScanToolResponse extends Record<string, unknown> {
+  content: [{ type: "text"; text: string }];
+  structuredContent: ScanResult & Record<string, unknown>;
+}
+
+/**
+ * Maps a {@link ScanResult} to the MCP tool-result envelope. Kept separate from
+ * index.ts's server wiring, same reason as `scanForSecrets` itself, so the exact
+ * response shape a client receives — including that `summary` appears both in
+ * `content` (for a text-only client) and `structuredContent` (for a typed one) —
+ * is unit tested without standing up a transport.
+ */
+export function toToolResponse(result: ScanResult): ScanToolResponse {
+  return {
+    content: [{ type: "text", text: result.summary }],
+    structuredContent: { ...result },
+  };
+}
+
 function buildSummary(findings: ScanFinding[], truncated: boolean): string {
   const truncationNote = truncated
     ? `\n\n(Input exceeded ${MAX_CODE_LENGTH.toLocaleString()} characters — only the first ${MAX_CODE_LENGTH.toLocaleString()} were scanned. Consider scanning smaller chunks.)`

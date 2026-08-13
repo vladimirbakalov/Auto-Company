@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { scanForSecrets } from "./mcp-tool.js";
+import { scanForSecrets, toToolResponse } from "./mcp-tool.js";
 
 describe("scanForSecrets", () => {
   it("returns an empty findings list and a clear summary for clean code", () => {
@@ -59,6 +59,39 @@ describe("scanForSecrets", () => {
     const result = scanForSecrets(`const stripeKey = "${secret}";`);
     expect(result.summary).not.toContain(secret);
     for (const finding of result.findings) {
+      expect(finding.redactedLine).not.toContain(secret);
+    }
+  });
+});
+
+describe("toToolResponse", () => {
+  it("wraps a clean scan into a single text-content entry and matching structuredContent", () => {
+    const result = scanForSecrets(`const greeting = "hello world";`);
+    const response = toToolResponse(result);
+
+    expect(response.content).toEqual([{ type: "text", text: "No secrets detected." }]);
+    expect(response.structuredContent).toEqual(result);
+  });
+
+  it("carries findings through to structuredContent while content stays the human-readable summary", () => {
+    const result = scanForSecrets(`const key = "AKIAIOSFODNN7EXAMPLE";`, "src/config.ts");
+    const response = toToolResponse(result);
+
+    expect(response.content).toHaveLength(1);
+    expect(response.content[0].type).toBe("text");
+    expect(response.content[0].text).toBe(result.summary);
+    expect(response.structuredContent.findings).toEqual(result.findings);
+    expect(response.structuredContent.findings).toHaveLength(1);
+  });
+
+  it("never leaks a raw secret into either the content text or structuredContent summary", () => {
+    const secret = "sk_live_" + "4eC39HqLyjWDarjtT1zdp7dc";
+    const result = scanForSecrets(`const stripeKey = "${secret}";`);
+    const response = toToolResponse(result);
+
+    expect(response.content[0].text).not.toContain(secret);
+    expect(response.structuredContent.summary).not.toContain(secret);
+    for (const finding of response.structuredContent.findings) {
       expect(finding.redactedLine).not.toContain(secret);
     }
   });
