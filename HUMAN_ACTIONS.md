@@ -185,6 +185,18 @@ Net: doesn't fully replace `wrangler login`, but is a real, lower-friction
 option worth trying first for `vibecheck`'s free-tier scanner specifically —
 just needs a human on standby for the 60-minute claim window when it's tried.
 
+**Cycle #106 update — `snapog` is now also `--temporary`-deploy-ready.**
+The R2 block above (`OG_CACHE` unsupported by `--temporary`) is fixed at
+the code level: `OG_CACHE` is now optional in `Env`, both call sites
+degrade to MISS-only caching when it's unbound (`ac41d8b`), and a new
+`wrangler.temporary.toml` (D1 + vars only, no R2) is the deploy config for
+this path — `--dry-run` verified. Not yet actually deployed: doing so opens
+a second, independent 60-minute claim window, and stacking it on top of
+vibecheck's still-unresolved one risks both being missed. Will run in its
+own dedicated window once vibecheck's resolves (or whenever you're next on
+standby for a claim click — same "be ready within the hour" ask as #3
+below, just for a second URL when it happens).
+
 **Cycle #101 update — two things fixed, one open question resolved by
 code inspection (still not hands-on tested):**
 
