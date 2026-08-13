@@ -81,7 +81,7 @@ export function checkExposedEnv(tree: string[], files: RepoFile[]): Finding[] {
 
   const gitignore = files.find(f => f.path.split('/').pop() === '.gitignore');
   const ignoresEnv = gitignore
-    ? /(^|\n)\s*(\*\*\/)?\.env\*?\s*($|\n)/.test(gitignore.content)
+    ? /(^|\n)\s*(\*\*\/)?\.env(\.\*|\*)?\s*($|\n)/.test(gitignore.content)
     : false;
 
   if (ignoresEnv) {
@@ -132,7 +132,12 @@ export const SECRET_PATTERNS: { name: string; regex: RegExp; severity: Finding['
   },
 ];
 
-const PLACEHOLDER_VALUES = /^(your[-_]?|xxx+|changeme|example|placeholder|<.*>|\.{3,}|test|dummy)/i;
+// Unambiguous placeholder prefixes only. "test" is deliberately excluded here — it's a
+// common prefix for real (if lower-stakes) live keys, so it's handled separately below
+// with a tighter match that requires the value to *be* a placeholder, not merely start
+// with one, avoiding a false negative on real secrets like "testapikeyvalue1234".
+const PLACEHOLDER_VALUES = /^(your[-_]?|xxx+|changeme|example|placeholder|<.*>|\.{3,}|dummy)/i;
+const TEST_PLACEHOLDER_VALUE = /^test[-_]?(key|token|secret|value|placeholder)?$/i;
 
 function checkGenericAssignedSecret(line: string): { value: string } | null {
   const m = line.match(
@@ -141,6 +146,7 @@ function checkGenericAssignedSecret(line: string): { value: string } | null {
   if (!m) return null;
   const value = m[3];
   if (PLACEHOLDER_VALUES.test(value)) return null;
+  if (TEST_PLACEHOLDER_VALUE.test(value)) return null;
   if (/^(process\.env|import\.meta\.env|Deno\.env)/.test(value)) return null;
   // Skip if the value itself looks like a reference/interpolation rather than a literal.
   if (/[${}]/.test(value)) return null;

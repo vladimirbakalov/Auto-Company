@@ -109,6 +109,13 @@ describe('checkExposedEnv', () => {
     expect(findings).toHaveLength(1);
     expect(findings[0].severity).toBe('medium');
   });
+
+  it('downgrades to medium when .gitignore excludes .env via a .env.* wildcard', () => {
+    const gitignore = file('.gitignore', 'node_modules\n.env.*\ndist\n');
+    const findings = checkExposedEnv(['.env'], [gitignore]);
+    expect(findings).toHaveLength(1);
+    expect(findings[0].severity).toBe('medium');
+  });
 });
 
 describe('checkHardcodedSecrets', () => {
@@ -147,11 +154,19 @@ describe('checkHardcodedSecrets', () => {
     expect(findings).toEqual([]);
   });
 
-  it('does not flag values that start with the word "test" even outside sk_test_', () => {
+  it('does not flag bare "test"-style placeholder values', () => {
+    const bareTest = checkHardcodedSecrets([file('src/a.ts', 'const token = "test";')]);
+    const testKey = checkHardcodedSecrets([file('src/b.ts', 'const token = "test-key";')]);
+    expect(bareTest).toEqual([]);
+    expect(testKey).toEqual([]);
+  });
+
+  it('flags a real-looking secret that happens to start with "test" as a naming prefix', () => {
     const findings = checkHardcodedSecrets([
       file('src/client.ts', 'const token = "testapikeyvalue1234";'),
     ]);
-    expect(findings).toEqual([]);
+    expect(findings).toHaveLength(1);
+    expect(findings[0].severity).toBe('high');
   });
 
   it('flags a hardcoded secret assigned via backtick template literal', () => {
