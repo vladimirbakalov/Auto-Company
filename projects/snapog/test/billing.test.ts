@@ -6,7 +6,7 @@
 // the route verifies against, so signature verification is exercised for
 // real without ever hitting Stripe's API.
 
-import { describe, it, expect, beforeEach } from 'vitest';
+import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 import Stripe from 'stripe';
 import type { Env, Tier } from '../src/types';
 import { TIER_LIMITS } from '../src/types';
@@ -144,6 +144,33 @@ async function signedWebhookRequest(payload: string, secret = WEBHOOK_SECRET) {
   const signature = await signingStripe.webhooks.generateTestHeaderStringAsync({ payload, secret });
   return { signature, payload };
 }
+
+// getStripe() (src/billing/stripe.ts) builds its client on
+// Stripe.createFetchHttpClient(), which defaults to globalThis.fetch — so
+// stubbing that global is the only way to exercise a route past the point
+// where it actually calls the Stripe API, without hitting the network.
+// Records the last request's URL-decoded form body so tests can assert on
+// exactly what the route sent Stripe (e.g. `customer` vs `customer_email`).
+let lastRequestBody: URLSearchParams | null = null;
+
+function stubStripeApi(respond: (url: string) => { status: number; body: unknown }) {
+  lastRequestBody = null;
+  vi.stubGlobal(
+    'fetch',
+    vi.fn(async (input: string | URL, init?: RequestInit) => {
+      const url = input.toString();
+      if (typeof init?.body === 'string') {
+        lastRequestBody = new URLSearchParams(init.body);
+      }
+      const { status, body } = respond(url);
+      return new Response(JSON.stringify(body), { status, headers: { 'Content-Type': 'application/json' } });
+    })
+  );
+}
+
+afterEach(() => {
+  vi.unstubAllGlobals();
+});
 
 describe('POST /billing/webhook', () => {
   let db: FakeD1;
@@ -524,6 +551,106 @@ describe('POST /billing/checkout', () => {
     );
     expect(res.status).toBe(401);
   });
+
+  it('sends the existing Stripe customer (not customer_email) and redirects to the returned session url', async () => {
+    const db = new FakeD1();
+    const env = baseEnv(db);
+    const rawKey = 'sk_live_key_existing_customer';
+    const hash = await sha256(rawKey);
+    db.users.set('user_1', { id: 'user_1', email: 'dev@example.com', stripe_customer_id: 'cus_existing_1' });
+    db.apiKeys.set('key_1', {
+      id: 'key_1',
+      user_id: 'user_1',
+      tier: 'free',
+      monthly_limit: TIER_LIMITS.free,
+      stripe_subscription_id: null,
+      stripe_subscription_status: null,
+      key_hash: hash,
+    });
+
+    stubStripeApi(url => {
+      expect(url).toContain('api.stripe.com/v1/checkout/sessions');
+      return { status: 200, body: { id: 'cs_test_new', url: 'https://checkout.stripe.com/pay/cs_test_new' } };
+    });
+
+    const res = await app.request(
+      '/billing/checkout',
+      { method: 'POST', body: new URLSearchParams({ key: rawKey, tier: 'pro' }) },
+      env
+    );
+
+    expect(res.status).toBe(303);
+    expect(res.headers.get('location')).toBe('https://checkout.stripe.com/pay/cs_test_new');
+    expect(lastRequestBody?.get('customer')).toBe('cus_existing_1');
+    expect(lastRequestBody?.get('customer_email')).toBeNull();
+    expect(lastRequestBody?.get('line_items[0][price]')).toBe('price_pro_test');
+    expect(lastRequestBody?.get('metadata[api_key_id]')).toBe('key_1');
+    expect(lastRequestBody?.get('metadata[tier]')).toBe('pro');
+  });
+
+  it('sends customer_email (not customer) for a first-time subscriber with no Stripe customer on file yet', async () => {
+    const db = new FakeD1();
+    const env = baseEnv(db);
+    const rawKey = 'sk_live_key_first_time';
+    const hash = await sha256(rawKey);
+    db.users.set('user_2', { id: 'user_2', email: 'first-timer@example.com', stripe_customer_id: null });
+    db.apiKeys.set('key_2', {
+      id: 'key_2',
+      user_id: 'user_2',
+      tier: 'free',
+      monthly_limit: TIER_LIMITS.free,
+      stripe_subscription_id: null,
+      stripe_subscription_status: null,
+      key_hash: hash,
+    });
+
+    stubStripeApi(() => ({
+      status: 200,
+      body: { id: 'cs_test_first_time', url: 'https://checkout.stripe.com/pay/cs_test_first_time' },
+    }));
+
+    const res = await app.request(
+      '/billing/checkout',
+      { method: 'POST', body: new URLSearchParams({ key: rawKey, tier: 'business' }) },
+      env
+    );
+
+    expect(res.status).toBe(303);
+    expect(lastRequestBody?.get('customer_email')).toBe('first-timer@example.com');
+    expect(lastRequestBody?.get('customer')).toBeNull();
+    expect(lastRequestBody?.get('line_items[0][price]')).toBe('price_business_test');
+  });
+
+  it('returns 502 when Stripe creates a session with no url to redirect to', async () => {
+    const db = new FakeD1();
+    const env = baseEnv(db);
+    const rawKey = 'sk_live_key_no_url';
+    const hash = await sha256(rawKey);
+    db.users.set('user_3', { id: 'user_3', email: 'dev3@example.com', stripe_customer_id: 'cus_existing_3' });
+    db.apiKeys.set('key_3', {
+      id: 'key_3',
+      user_id: 'user_3',
+      tier: 'free',
+      monthly_limit: TIER_LIMITS.free,
+      stripe_subscription_id: null,
+      stripe_subscription_status: null,
+      key_hash: hash,
+    });
+
+    // Stripe's API contract allows a session without a hosted checkout url
+    // in some configurations (e.g. embedded checkout) — the route must
+    // treat a missing url as a hard error rather than redirecting to
+    // "undefined".
+    stubStripeApi(() => ({ status: 200, body: { id: 'cs_test_no_url' } }));
+
+    const res = await app.request(
+      '/billing/checkout',
+      { method: 'POST', body: new URLSearchParams({ key: rawKey, tier: 'pro' }) },
+      env
+    );
+
+    expect(res.status).toBe(502);
+  });
 });
 
 describe('GET /billing/portal', () => {
@@ -566,5 +693,33 @@ describe('GET /billing/portal', () => {
 
     const res = await app.request(`/billing/portal?key=${rawKey}`, {}, env);
     expect(res.status).toBe(404);
+  });
+
+  it('creates a portal session for the customer on file and redirects to the returned url', async () => {
+    const db = new FakeD1();
+    const env = baseEnv(db);
+    const rawKey = 'sk_live_key_has_billing';
+    const hash = await sha256(rawKey);
+    db.users.set('user_8', { id: 'user_8', email: 'billed@example.com', stripe_customer_id: 'cus_existing_8' });
+    db.apiKeys.set('key_8', {
+      id: 'key_8',
+      user_id: 'user_8',
+      tier: 'pro',
+      monthly_limit: TIER_LIMITS.pro,
+      stripe_subscription_id: 'sub_test_8',
+      stripe_subscription_status: 'active',
+      key_hash: hash,
+    });
+
+    stubStripeApi(url => {
+      expect(url).toContain('api.stripe.com/v1/billing_portal/sessions');
+      return { status: 200, body: { id: 'bps_test_8', url: 'https://billing.stripe.com/session/bps_test_8' } };
+    });
+
+    const res = await app.request(`/billing/portal?key=${rawKey}`, {}, env);
+
+    expect(res.status).toBe(303);
+    expect(res.headers.get('location')).toBe('https://billing.stripe.com/session/bps_test_8');
+    expect(lastRequestBody?.get('customer')).toBe('cus_existing_8');
   });
 });
