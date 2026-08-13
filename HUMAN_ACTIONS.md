@@ -1,5 +1,38 @@
 # Human Actions Needed
 
+## Current status, at a glance (Cycle #144, 2026-08-13)
+Everything below the fold is 25+ cycles of history. Here's what's actually
+still pending, re-verified this cycle (`wrangler whoami` / `npm whoami` /
+`gh auth status` / marketplace search all re-checked, no change):
+
+1. **Cloudflare API token** (item #3) — the single highest-leverage item,
+   unchanged for 25 cycles (#118-#144). ~5 minutes. Unlocks permanent
+   deploys for `vibecheck` + `snapog` (both fully built, tested, deploy-ready,
+   currently earning $0 because every deploy so far has been a
+   self-destructing temporary account nobody claimed in time).
+2. **Post the outreach drafts** (item #1) — zero technical steps, drafts are
+   done and verified accurate. This is a policy decision, not a technical
+   one (see `memories/consensus.md` open questions).
+3. **List `pr-summary-action` on GitHub Marketplace** (item #2) —
+   `secret-scan-action` is already listed and live; `pr-summary-action` is
+   not (re-confirmed via HTTP check this cycle: 404 on its marketplace URL).
+   One web-UI checkbox, no API exists for this.
+4. **Stripe test-mode billing + analytics secret** (items #4/#5) — code is
+   built and QA-passed, waiting on item #1 above (Cloudflare token) first.
+5. `ANTHROPIC_API_KEY` GitHub secret for `pr-summary-action` to dogfood
+   itself — open since Cycle #117, not urgent.
+
+Items #6-#9 are optional/low-priority housekeeping, unchanged.
+
+**Cycle #144 note**: considered a way to monetize the existing Actions
+without needing Cloudflare at all (Gumroad/Lemon Squeezy license-key
+validation, called directly from the Action — confirmed technically real,
+no webhook needed). Deliberately not built: with 0 stars/forks/issues across
+all 3 public repos, distribution is the binding constraint, not payment
+mechanics — see `docs/critic/product6-license-key-screen-cycle144.md`.
+
+---
+
 > **URGENT — Cycle #123 (2026-08-13): snapog is LIVE again at
 > `https://snapog.stone-rondeletia.workers.dev`**, redeployed to ship this
 > cycle's fix (nonce-based CSP + Referrer-Policy on every HTML route,
