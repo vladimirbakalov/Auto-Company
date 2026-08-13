@@ -10,16 +10,15 @@ compatibility_flags = ["nodejs_compat"]
 # email list doesn't need a relational database or migrations.
 
 # Monitoring-tier D1 database (users/magic_links/monitors/checks/alerts —
-# see migrations/0001_init.sql). Same placeholder-id pattern as the WAITLIST
-# KV binding below: real id via `wrangler d1 create vibecheck-db` before
-# deploy, runtime null-check in code (`if (!c.env.DB)`) so local dev never
-# breaks on a missing binding. Apply migrations with:
-#   wrangler d1 migrations apply vibecheck-db --local
-#   wrangler d1 migrations apply vibecheck-db
+# see migrations/0001_init.sql). Real id below, created and migrated Cycle
+# #102 via `wrangler d1 create/migrations apply --temporary` — pending human
+# claim within the 60-minute window (see HUMAN_ACTIONS.md #3). Runtime
+# null-check in code (`if (!c.env.DB)`) so local dev never breaks on a
+# missing binding.
 [[d1_databases]]
 binding = "DB"
 database_name = "vibecheck-db"
-database_id = "REPLACE_WITH_D1_DATABASE_ID"
+database_id = "2455ac1c-eafb-4f97-bbb5-cfc7dd44302d"
 
 # Two Cron Triggers, both feeding the same `scheduled` handler in
 # src/index.ts — Cloudflare Workers dispatches every entry in this array to
@@ -43,6 +42,11 @@ database_id = "REPLACE_WITH_D1_DATABASE_ID"
 #    not the primary provisioning path, POST /api/stripe/webhook is). No-ops
 #    gracefully if c.env.STRIPE_SECRET_KEY or
 #    c.env.DB is missing.
+# Cycle #102: cron triggers failed to attach under the `--temporary` claim
+# account (Workers Free plan caps cron triggers at 0 per account, error code
+# 10072) — everything else in this file deployed fine. Re-run `wrangler
+# deploy` (no `--temporary` needed) after claiming + upgrading to Workers
+# Paid to pick these up; the Worker itself is already live without them.
 [triggers]
 crons = ["* * * * *", "0 * * * *"]
 
@@ -51,19 +55,16 @@ crons = ["* * * * *", "0 * * * *"]
 # docs/ceo/vibecheck-godecision-cycle4.md). KV is the simplest primitive that
 # fits: write-mostly key -> value, no queries, no joins.
 #
-# TODO(devops): before first real deploy, run
-#   wrangler kv:namespace create WAITLIST
-#   wrangler kv:namespace create WAITLIST --preview
-# and replace the placeholder ids below with the real ones. Local `wrangler
-# dev` works fine with placeholders (KV is simulated locally and never
-# touches Cloudflare's API); only `--remote` dev or `wrangler deploy` need
-# real ids. Even so, src/index.ts checks `c.env.WAITLIST` at runtime and
+# Real ids below, created Cycle #102 via `wrangler kv:namespace create
+# WAITLIST --temporary` against a `wrangler deploy --temporary` claim
+# account — pending human claim within the 60-minute window (see
+# HUMAN_ACTIONS.md #3). src/index.ts checks `c.env.WAITLIST` at runtime and
 # no-ops with a logged TODO if the binding is ever missing, so this can never
 # turn into a 500 for the user.
 [[kv_namespaces]]
 binding = "WAITLIST"
-id = "REPLACE_WITH_KV_NAMESPACE_ID"
-preview_id = "REPLACE_WITH_KV_PREVIEW_NAMESPACE_ID"
+id = "4931c9ef8b154737872e15d2119429d4"
+preview_id = "f21354ccf418446b8069886b50eda440"
 
 # Coarse per-IP rate-limit counters for the unauthenticated URL-probing/
 # scanning endpoints (POST /api/scan, POST /api/probe-check, POST
@@ -76,19 +77,15 @@ preview_id = "REPLACE_WITH_KV_PREVIEW_NAMESPACE_ID"
 # window counters, not a queryable store, so KV (no migrations, no schema)
 # is still the right primitive.
 #
-# TODO(devops): before first real deploy, run
-#   wrangler kv:namespace create RATE_LIMIT
-#   wrangler kv:namespace create RATE_LIMIT --preview
-# and replace the placeholder ids below with the real ones. Local `wrangler
-# dev` works fine with placeholders (KV is simulated locally and never
-# touches Cloudflare's API); only `--remote` dev or `wrangler deploy` need
-# real ids. Even so, checkRateLimit() (src/rateLimit.ts) treats a missing
-# binding as "always allow" rather than throwing, so this can never turn
-# into a 500 or an availability regression for real traffic.
+# Real ids below, created Cycle #102 the same way as WAITLIST above —
+# pending human claim within the 60-minute window (see HUMAN_ACTIONS.md #3).
+# checkRateLimit() (src/rateLimit.ts) treats a missing binding as "always
+# allow" rather than throwing, so this can never turn into a 500 or an
+# availability regression for real traffic.
 [[kv_namespaces]]
 binding = "RATE_LIMIT"
-id = "REPLACE_WITH_KV_NAMESPACE_ID"
-preview_id = "REPLACE_WITH_KV_PREVIEW_NAMESPACE_ID"
+id = "91e21774b056420688813f9cbeb355b8"
+preview_id = "2ba1658ce8e8487298409afe8546eef9"
 
 [vars]
 ENVIRONMENT = "development"
