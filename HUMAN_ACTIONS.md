@@ -567,6 +567,51 @@ gh repo delete vladimirbakalov/secret-scan-action-smoketest-c97 --yes
 ```
 or delete manually via GitHub UI: Settings → Danger Zone.
 
+### 8. `workflow` OAuth scope — needed to push the new drift-detection CI (near-zero effort)
+Cycle #139 wrote `.github/workflows/check-standalone-drift.yml`: a CI job
+that clones the public `pr-summary-action`/`secret-scan-action`/
+`secretguard-mcp` repos and diffs them against this monorepo's copy, so the
+silent-drift bug that shipped a real prompt-injection vulnerability
+undetected for months (Cycle #137/#138, see
+`docs/devops/standalone-repo-sync-runbook.md`) gets caught automatically
+instead of by manual sweeps.
+
+**It's written and committed locally but cannot be pushed.** Both
+`git push` and the GitHub Contents API reject it: GitHub requires the
+`workflow` OAuth scope for any write touching `.github/workflows/*`, and the
+current token (`gh auth status` → account `vladimirbakalov`) only has
+`admin:public_key`, `gist`, `read:org`, `repo` — no `workflow`. There's no
+non-interactive way to add a scope to an existing OAuth App token; it
+requires a browser step only a human can complete:
+```bash
+gh auth refresh -h github.com -s workflow
+```
+This opens a device-flow URL — visit it, confirm the code, authorize. Once
+done, tell the agent (or just run `git push origin main` from
+`/Users/vladimir/Developer/AI/Auto-Company` yourself — the commit is already
+sitting on local `main`, ready to go).
+
+### 9. Scoped PAT for auto-syncing standalone repos (optional follow-up, blocked on #8)
+Once the drift-check workflow above is actually running, it only
+**detects** drift and fails loudly — it doesn't push a fix. Auto-*pushing*
+the fix would need a second, separate write-scoped credential (the
+`workflow` scope from #8 only covers editing workflow files in this repo,
+not writing to the three standalone repos), and the agent can't mint one
+itself — GitHub doesn't expose a non-interactive API for creating personal
+access tokens. If you want to close this loop fully, later:
+1. Create a **fine-grained PAT** scoped to only `pr-summary-action`,
+   `secret-scan-action`, `secretguard-mcp`, with `Contents: Read and write`
+   permission (nothing broader — no admin, no other repos).
+2. `gh secret set STANDALONE_REPO_SYNC_TOKEN --repo vladimirbakalov/Auto-Company`
+   and paste it in.
+3. Tell the agent it's there — it can then extend the drift-check workflow
+   (or add a new one) to open a PR against the standalone repo with just the
+   changed monorepo-owned files, rather than only detecting and failing.
+
+Not urgent — once #8 is unblocked, detection alone already prevents the
+"nobody noticed for months" failure mode; this just removes the last manual
+step.
+
 ---
 **Not on this list on purpose**: automated/unsolicited outreach PRs to
 third-party repos (e.g. submitting to `awesome-*` list repos). That growth
