@@ -28,8 +28,24 @@ export interface ScanResult {
   summary: string;
 }
 
+/**
+ * Upper bound on how much of the `code` input is actually scanned.
+ *
+ * `code` comes straight from an MCP tool call — any client on the other end
+ * of the stdio transport can send an arbitrarily large string. The rule
+ * engine runs ~90 regexes per line with no cap of its own (unlike
+ * secret-scan-action, where GitHub's PR-diff API already bounds patch size
+ * per file before this code ever sees it), so an unbounded input is a real
+ * CPU/memory exhaustion vector for the local server process. 5MB comfortably
+ * covers any real single-file/snippet scan an agent would plausibly submit.
+ */
+const MAX_CODE_LENGTH = 5_000_000;
+
 export function scanForSecrets(code: string, filename?: string): ScanResult {
-  const lines = linesFromCode(code, filename);
+  const truncated = code.length > MAX_CODE_LENGTH;
+  const bounded = truncated ? code.slice(0, MAX_CODE_LENGTH) : code;
+
+  const lines = linesFromCode(bounded, filename);
   const rawFindings = scan(lines);
 
   const findings: ScanFinding[] = rawFindings.map((f) => ({
@@ -41,12 +57,16 @@ export function scanForSecrets(code: string, filename?: string): ScanResult {
     redactedLine: redactLine(f.contextLine, f.secret),
   }));
 
-  return { findings, summary: buildSummary(findings) };
+  return { findings, summary: buildSummary(findings, truncated) };
 }
 
-function buildSummary(findings: ScanFinding[]): string {
+function buildSummary(findings: ScanFinding[], truncated: boolean): string {
+  const truncationNote = truncated
+    ? `\n\n(Input exceeded ${MAX_CODE_LENGTH.toLocaleString()} characters — only the first ${MAX_CODE_LENGTH.toLocaleString()} were scanned. Consider scanning smaller chunks.)`
+    : "";
+
   if (findings.length === 0) {
-    return "No secrets detected.";
+    return `No secrets detected.${truncationNote}`;
   }
 
   const highCount = findings.filter((f) => f.confidence === "high").length;
@@ -58,5 +78,5 @@ function buildSummary(findings: ScanFinding[]): string {
     (f) => `- [${f.confidence}] ${f.filename}:${f.line} — ${f.description} (${f.ruleId})\n  ${f.redactedLine}`,
   );
 
-  return [header, "", ...rows].join("\n");
+  return [header, "", ...rows].join("\n") + truncationNote;
 }
