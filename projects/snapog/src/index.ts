@@ -73,24 +73,42 @@ async function maybeResetUsage(db: D1Database, key: ApiKey): Promise<ApiKey> {
   return key;
 }
 
-// Increment usage counter and record event
-async function recordUsage(
+// Atomically attempt to consume one unit of the key's monthly quota via a
+// conditional UPDATE, rather than a separate "read usage_count, compare,
+// then increment later" sequence. D1/SQLite serializes writes per database,
+// so this compare-and-increment is race-free even when many /og requests
+// for the same key arrive concurrently — no window where two overlapping
+// requests both observe a stale usage_count and both pass the limit check.
+// Returns false (no row matched, no increment happened) once the key is
+// already at/over its monthly_limit; callers must treat that as "quota
+// exhausted" and do no further (expensive) work.
+async function tryConsumeUsage(db: D1Database, key: ApiKey): Promise<boolean> {
+  const result = await db
+    .prepare(
+      'UPDATE api_keys SET usage_count = usage_count + 1 WHERE id = ? AND usage_count < monthly_limit'
+    )
+    .bind(key.id)
+    .run();
+  return (result.meta?.changes ?? 0) > 0;
+}
+
+// Record a usage event for analytics/dashboard display only. Quota
+// consumption already happened atomically in tryConsumeUsage before this is
+// called, so a slow/failed analytics insert can never let a request bypass
+// the monthly limit.
+async function recordUsageEvent(
   db: D1Database,
-  key: ApiKey,
+  apiKeyId: string,
   template: string,
   cacheHit: boolean
 ): Promise<void> {
   const eventId = crypto.randomUUID();
-  await db.batch([
-    db
-      .prepare('UPDATE api_keys SET usage_count = usage_count + 1 WHERE id = ?')
-      .bind(key.id),
-    db
-      .prepare(
-        'INSERT INTO usage_events (id, api_key_id, template, cache_hit) VALUES (?, ?, ?, ?)'
-      )
-      .bind(eventId, key.id, template, cacheHit ? 1 : 0),
-  ]);
+  await db
+    .prepare(
+      'INSERT INTO usage_events (id, api_key_id, template, cache_hit) VALUES (?, ?, ?, ?)'
+    )
+    .bind(eventId, apiKeyId, template, cacheHit ? 1 : 0)
+    .run();
 }
 
 // ─── Routes ───────────────────────────────────────────────────────────────────
@@ -124,8 +142,12 @@ app.get('/og', async c => {
   // Reset usage if month rolled
   apiKey = await maybeResetUsage(c.env.DB, apiKey);
 
-  // Check rate limit
-  if (apiKey.usage_count >= apiKey.monthly_limit) {
+  // Atomically claim one unit of quota *before* doing any cache lookup or
+  // (expensive) image generation. This must happen up front, not after the
+  // response is built — see tryConsumeUsage for why a later/fire-and-forget
+  // increment lets concurrent requests race past the monthly limit.
+  const withinQuota = await tryConsumeUsage(c.env.DB, apiKey);
+  if (!withinQuota) {
     return c.json(
       {
         error: 'Monthly image limit reached',
@@ -156,8 +178,9 @@ app.get('/og', async c => {
   // ── R2 cache lookup (skipped entirely if OG_CACHE isn't bound — see Env) ──
   const cached = c.env.OG_CACHE ? await c.env.OG_CACHE.get(r2Key) : null;
   if (cached) {
-    // Cache hit — return stored PNG, still track usage (counts toward limit)
-    await recordUsage(c.env.DB, apiKey, params.template ?? 'default', true);
+    // Cache hit — return stored PNG. Quota was already consumed above;
+    // this just logs the event for the dashboard's "recent generations".
+    await recordUsageEvent(c.env.DB, apiKey.id, params.template ?? 'default', true);
     const imageData = await cached.arrayBuffer();
     return new Response(imageData, {
       headers: {
@@ -184,9 +207,10 @@ app.get('/og', async c => {
     );
   }
 
-  // Record usage (also fire-and-forget after we have the image)
+  // Log the analytics event (fire-and-forget). Quota was already consumed
+  // above, before generation started.
   c.executionCtx.waitUntil(
-    recordUsage(c.env.DB, apiKey, params.template ?? 'default', false)
+    recordUsageEvent(c.env.DB, apiKey.id, params.template ?? 'default', false)
   );
 
   return new Response(imageBuffer, {
@@ -216,7 +240,11 @@ app.post('/register', async c => {
     return htmlResponse(registerPage('Invalid form data'), 400);
   }
 
-  if (!email || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
+  // Excludes HTML metacharacters in addition to whitespace/@ — defense in
+  // depth alongside escapeHtml() at every render site (keyCreatedPage),
+  // since the original pattern happily accepted a local-part like
+  // `<script>alert(1)</script>` as a "valid" email.
+  if (!email || !/^[^\s@<>"'&]+@[^\s@<>"'&]+\.[^\s@<>"'&]+$/.test(email)) {
     return htmlResponse(registerPage('Please enter a valid email address', tier), 400);
   }
 

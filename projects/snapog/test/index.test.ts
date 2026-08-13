@@ -93,9 +93,19 @@ class FakeD1 {
                 k.usage_reset_at = newResetAt;
               }
             } else if (sql.includes('UPDATE api_keys SET usage_count = usage_count + 1')) {
+              // Mirrors the real conditional UPDATE in src/index.ts
+              // (`... WHERE id = ? AND usage_count < monthly_limit`) and its
+              // meta.changes contract: only increments — and only reports a
+              // change — when the key is still under quota. tryConsumeUsage
+              // relies on meta.changes to detect "quota exhausted".
               const [id] = args as [string];
               const k = self.apiKeys.get(id);
-              if (k) k.usage_count += 1;
+              let changes = 0;
+              if (k && k.usage_count < k.monthly_limit) {
+                k.usage_count += 1;
+                changes = 1;
+              }
+              return { success: true, meta: { changes } };
             } else if (sql.includes('INSERT INTO usage_events')) {
               const [id, api_key_id, template, cache_hit] = args as [string, string, string, number];
               self.usageEvents.push({
@@ -227,6 +237,48 @@ describe('snapog routes', () => {
       expect(db.usersByEmail.size).toBe(1);
       expect(db.apiKeys.size).toBe(2); // two keys, same user
     });
+
+    it('rejects an email whose local part carries HTML metacharacters', async () => {
+      // Belt-and-suspenders alongside the escapeHtml() fix below: the email
+      // regex itself should reject this, not just rely on render-time escaping.
+      const res = await app.request(
+        '/register',
+        { method: 'POST', body: new URLSearchParams({ email: '<script>alert(1)</script>@evil.com' }) },
+        env
+      );
+      expect(res.status).toBe(400);
+    });
+
+    it('keyCreatedPage() escapes the email before echoing it back', async () => {
+      // Regression test for the render-time defense-in-depth layer,
+      // independent of the route-level regex tightened above: even if a
+      // malicious-looking-but-technically-valid email ever slipped past
+      // validation (or the regex regresses in a future change), the render
+      // function itself must not emit it unescaped. Calls keyCreatedPage()
+      // directly so this doesn't depend on the /register regex's current
+      // strictness.
+      const { keyCreatedPage } = await import('../src/dashboard/pages');
+      const html = keyCreatedPage('sk_deadbeef', '"><img src=x onerror=alert(1)>@evil.com', 'free');
+      expect(html).not.toContain('<img src=x onerror=alert(1)>');
+      expect(html).toContain('&lt;img src=x onerror=alert(1)&gt;');
+    });
+  });
+
+  describe('GET /register', () => {
+    it('escapes a malicious tier query param instead of reflecting it raw', async () => {
+      // Regression test: GET /register?tier=... used to interpolate `tier`
+      // straight into a `value="..."` HTML attribute unescaped, so a value
+      // like `"><script>...` broke out of the attribute and injected a
+      // script tag — a plain, unauthenticated reflected-XSS link, no form
+      // submission needed. Assert the raw payload never appears in the
+      // response and the escaped form does.
+      const payload = '"><script>alert(document.cookie)</script>';
+      const res = await app.request(`/register?tier=${encodeURIComponent(payload)}`, {}, env);
+      expect(res.status).toBe(200);
+      const body = await res.text();
+      expect(body).not.toContain('<script>alert(document.cookie)</script>');
+      expect(body).toContain('&lt;script&gt;');
+    });
   });
 
   describe('GET /og', () => {
@@ -319,6 +371,34 @@ describe('snapog routes', () => {
       await app.request(`/og?title=${longTitle}&key=${rawKey}`, {}, env, fakeExecutionContext());
       const paramsArg = generateOGImageMock.mock.calls[0][0] as { title: string };
       expect(paramsArg.title.length).toBe(120);
+    });
+
+    it('does not let concurrent requests race past the monthly limit', async () => {
+      // Regression test for the TOCTOU quota bug: the old code read
+      // usage_count once at the top of the handler and only incremented it
+      // later (after image generation, via a fire-and-forget waitUntil), so
+      // N concurrent requests could all observe the same under-limit
+      // usage_count and all be allowed through — a single key could
+      // generate unbounded images by firing requests concurrently instead
+      // of sequentially. tryConsumeUsage() now does an atomic conditional
+      // UPDATE up front, so exactly one slot's worth of requests should
+      // succeed no matter how many arrive at once.
+      const rawKey = await registerKey('free');
+      const hash = await sha256(rawKey);
+      const key = [...db.apiKeys.values()].find(k => k.key_hash === hash)!;
+      key.usage_count = key.monthly_limit - 1; // exactly one slot left
+
+      const results = await Promise.all(
+        Array.from({ length: 5 }, () =>
+          app.request(`/og?title=Hello&key=${rawKey}`, {}, env, fakeExecutionContext())
+        )
+      );
+
+      const succeeded = results.filter(r => r.status === 200);
+      const limited = results.filter(r => r.status === 429);
+      expect(succeeded.length).toBe(1);
+      expect(limited.length).toBe(4);
+      expect(key.usage_count).toBe(key.monthly_limit); // never exceeded, never under-counted
     });
   });
 

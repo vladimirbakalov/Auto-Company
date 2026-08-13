@@ -3,6 +3,20 @@
 
 import type { ApiKey } from '../types';
 
+// Escape a string for safe interpolation into HTML text/attribute contexts.
+// Every value that ultimately traces back to a request (query param, form
+// field, or the request's own Host header) must go through this before
+// being concatenated into a template string below — this file has no other
+// XSS guardrail (no JSX/DOM builder, plain string templates + Response).
+function escapeHtml(input: string): string {
+  return String(input)
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&#39;');
+}
+
 const CSS = `
   @import url('https://fonts.googleapis.com/css2?family=JetBrains+Mono:ital,wght@0,300;0,400;0,500;0,700;1,400&family=DM+Sans:ital,opsz,wght@0,9..40,300;0,9..40,400;0,9..40,500;0,9..40,700;1,9..40,400&display=swap');
 
@@ -375,8 +389,12 @@ function footer(): string {
   </footer>`;
 }
 
-export function landingPage(host: string): string {
-  void host; // used in template strings below
+export function landingPage(rawHost: string): string {
+  // rawHost comes from the incoming request's URL (ultimately the Host
+  // header) — not guaranteed to be the canonical domain, so treat it as
+  // untrusted input and escape it before interpolating into HTML, same as
+  // any other request-derived value.
+  const host = escapeHtml(rawHost);
 
   const body = `
   ${nav('/')}
@@ -594,11 +612,11 @@ export function registerPage(error?: string, tier?: string): string {
       <h1 class="section-h2">Start generating</h1>
       <p class="section-sub" style="margin-bottom:32px;">Enter your email to receive your API key instantly. No password. No credit card for free tier.</p>
 
-      ${error ? `<div class="alert alert-error">${error}</div>` : ''}
+      ${error ? `<div class="alert alert-error">${escapeHtml(error)}</div>` : ''}
 
       <div class="card">
         <form method="POST" action="/register">
-          <input type="hidden" name="tier" value="${tier ?? 'free'}" />
+          <input type="hidden" name="tier" value="${escapeHtml(tier ?? 'free')}" />
           <div class="form-group">
             <label class="form-label" for="email">EMAIL ADDRESS</label>
             <input class="form-input" type="email" name="email" id="email" placeholder="you@example.com" required autocomplete="email" />
@@ -631,7 +649,7 @@ export function keyCreatedPage(rawKey: string, email: string, tier: string): str
   <section class="section">
     <div class="container" style="max-width:600px;">
       <div class="alert alert-success">
-        ✓ API key created for ${email}
+        ✓ API key created for ${escapeHtml(email)}
       </div>
       <p class="section-title">Your API Key</p>
       <h1 class="section-h2">Save this key now</h1>
@@ -780,7 +798,7 @@ export function errorPage(code: number, message: string): string {
   <section class="section">
     <div class="container" style="text-align:center;max-width:480px;">
       <p style="font-family:var(--font-mono);font-size:80px;font-weight:700;color:var(--border);line-height:1;">${code}</p>
-      <h1 style="font-size:24px;margin:16px 0 12px;">${message}</h1>
+      <h1 style="font-size:24px;margin:16px 0 12px;">${escapeHtml(message)}</h1>
       <p style="color:var(--text-2);margin-bottom:32px;">Something went wrong. Try again or check the docs.</p>
       <a href="/" class="btn btn-ghost">← Back to home</a>
     </div>
