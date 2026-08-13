@@ -302,6 +302,20 @@ describe('snapog routes', () => {
       expect(res.status).toBe(400);
     });
 
+    // registerPage()'s `error ?` branch (dashboard/pages.ts) was only ever
+    // exercised for its status code above, never for the actual alert-error
+    // markup/message it's supposed to render.
+    it('renders the validation error message in the alert-error div', async () => {
+      const res = await app.request(
+        '/register',
+        { method: 'POST', body: new URLSearchParams({ email: 'not-an-email' }) },
+        env
+      );
+      const html = await res.text();
+      expect(html).toContain('alert alert-error');
+      expect(html).toContain('Please enter a valid email address');
+    });
+
     it('creates a user + API key on valid submission', async () => {
       const rawKey = await registerKey('free');
       expect(rawKey).toMatch(/^sk_[0-9a-f]{64}$/);
@@ -351,6 +365,46 @@ describe('snapog routes', () => {
       const [key] = [...db.apiKeys.values()];
       expect(key.tier).toBe('free');
       expect(key.monthly_limit).toBe(100);
+    });
+
+    // keyCreatedPage()'s upsell block (dashboard/pages.ts) never appeared in
+    // any prior assertion — only its absence was implied by other tests
+    // never checking for it. `tier=pro`/`tier=business` on the register form
+    // is display-only (the created key is always free), but should still
+    // surface a "continue to checkout" upsell naming the requested tier.
+    it('shows a Pro-specific upsell block when the register form requested tier=pro', async () => {
+      const res = await app.request(
+        '/register',
+        { method: 'POST', body: new URLSearchParams({ email: 'upsell-pro@example.com', tier: 'pro' }) },
+        env
+      );
+      const html = await res.text();
+      expect(html).toContain('Continue to PRO');
+      expect(html).toContain('10,000 images/month');
+      expect(html).toContain('Subscribe to Pro');
+    });
+
+    it('shows a Business-specific upsell block when the register form requested tier=business', async () => {
+      const res = await app.request(
+        '/register',
+        { method: 'POST', body: new URLSearchParams({ email: 'upsell-biz@example.com', tier: 'business' }) },
+        env
+      );
+      const html = await res.text();
+      expect(html).toContain('Continue to BUSINESS');
+      expect(html).toContain('100,000 images/month');
+      expect(html).toContain('Subscribe to Business');
+    });
+
+    it('shows no upsell block when the register form did not request a paid tier', async () => {
+      const res = await app.request(
+        '/register',
+        { method: 'POST', body: new URLSearchParams({ email: 'no-upsell@example.com' }) },
+        env
+      );
+      const html = await res.text();
+      expect(html).not.toContain('Continue to');
+      expect(html).not.toContain('Subscribe to');
     });
 
     it('reuses the existing user on a duplicate email (upsert, not duplicate insert)', async () => {
