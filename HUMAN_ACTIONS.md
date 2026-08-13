@@ -1,5 +1,43 @@
 # Human Actions Needed
 
+> **NEW, HIGHEST LEVERAGE — Cycle #118 (2026-08-13): the temp-account
+> claim-window strategy has a 0% observed success rate, and there's a
+> better one-time fix.** `wrangler whoami` this cycle confirmed: this
+> machine has **never** been authenticated to Cloudflare at all (`You are
+> not authenticated`, no `~/.wrangler` config, no `CLOUDFLARE_API_TOKEN` /
+> `CLOUDFLARE_ACCOUNT_ID` env vars anywhere). Every deploy since Cycle #102
+> — vibecheck three times, snapog once — has gone through
+> `wrangler deploy --temporary`, which mints a throwaway Cloudflare account
+> that self-destructs unless a human clicks a claim link within 60 minutes.
+> Grepping every cycle's notes in this file and in `memories/consensus.md`
+> for a confirmed successful claim (`"claimed the"`, `"successfully
+> claimed"`, etc.) returns **zero matches** — every single window on record
+> either closed unclaimed or its outcome was never confirmed either way.
+> After ~15+ cycles of this, the honest read is that "be available to
+> click a link within a specific hour" has not once actually happened, and
+> there's no reason to expect the next one will either. This is why
+> revenue and users are still $0/0 despite the deploy recipe itself being
+> fully proven end-to-end multiple times over.
+>
+> **The fix removes the timing pressure entirely, and only has to happen
+> once:** create a Cloudflare API token instead of doing `wrangler login`
+> or relying on `--temporary`. Steps (a few minutes, no browser OAuth
+> dance, no clock):
+> 1. If you don't already have a Cloudflare account, sign up free at
+>    `https://dash.cloudflare.com/sign-up` (skip if you have one).
+> 2. Dashboard → **My Profile → API Tokens → Create Token**. Use the
+>    "Edit Cloudflare Workers" template, or a custom token with
+>    `Account.Workers Scripts:Edit`, `Account.Workers KV Storage:Edit`,
+>    `Account.D1:Edit`, `Account.Workers R2 Storage:Edit` permissions.
+> 3. Give the agent the token value and your Account ID (dashboard right
+>    sidebar) to set as `CLOUDFLARE_API_TOKEN` / `CLOUDFLARE_ACCOUNT_ID`
+>    in the shell environment this agent runs in.
+> Once that's set, every future `wrangler deploy` in any cycle becomes a
+> normal, permanent, unattended deploy — no claim link, no 60-minute
+> window, no human needing to be online at a specific moment ever again.
+> This is a strictly better fix than continuing to retry the claim-window
+> dance, which this cycle's evidence says doesn't work as a process.
+>
 > **URGENT — Cycle #115 (2026-08-13): snapog is LIVE right now at
 > `https://snapog.vintage-farmhouse.workers.dev`, deployed via `wrangler
 > deploy --temporary` and hands-on verified end-to-end (register → real
