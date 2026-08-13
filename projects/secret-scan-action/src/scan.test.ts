@@ -1046,6 +1046,222 @@ describe("scanLine — true positives (known-leaked-secret patterns)", () => {
     expect(findings.some((f) => f.ruleId === "beamer-api-token")).toBe(false);
   });
 
+  it("flags a Bittrex Access Key-shaped value when the keyword 'bittrex' is nearby", () => {
+    const value = "aB3fD1x9Qz".repeat(4).slice(0, 32).toLowerCase();
+    const findings = scanLine(line(`const bittrex_access_key = "${value}";`));
+    expect(findings.some((f) => f.ruleId === "bittrex-access-key" && f.confidence === "generic")).toBe(true);
+  });
+
+  it("does not flag a 32-char value shaped like a Bittrex Access Key without the keyword nearby", () => {
+    const value = "aB3fD1x9Qz".repeat(4).slice(0, 32).toLowerCase();
+    const findings = scanLine(line(`const unrelated_var = "${value}";`));
+    expect(findings.some((f) => f.ruleId === "bittrex-access-key")).toBe(false);
+  });
+
+  it("does not flag a Bittrex Access Key-shaped value that is one character short even with the keyword nearby", () => {
+    const value = "aB3fD1x9Qz".repeat(4).slice(0, 31).toLowerCase();
+    const findings = scanLine(line(`const bittrex_access_key = "${value}";`));
+    expect(findings.some((f) => f.ruleId === "bittrex-access-key")).toBe(false);
+  });
+
+  it("flags a Bittrex Secret Key-shaped value when the keyword 'bittrex' is nearby", () => {
+    const value = "aB3fD1x9Qz".repeat(4).slice(0, 32).toLowerCase();
+    const findings = scanLine(line(`const bittrex_secret_key = "${value}";`));
+    expect(findings.some((f) => f.ruleId === "bittrex-secret-key" && f.confidence === "generic")).toBe(true);
+  });
+
+  it("does not flag a 32-char value shaped like a Bittrex Secret Key without the keyword nearby", () => {
+    const value = "aB3fD1x9Qz".repeat(4).slice(0, 32).toLowerCase();
+    const findings = scanLine(line(`const unrelated_var = "${value}";`));
+    expect(findings.some((f) => f.ruleId === "bittrex-secret-key")).toBe(false);
+  });
+
+  it("does not flag a Bittrex Secret Key-shaped value that is one character short even with the keyword nearby", () => {
+    const value = "aB3fD1x9Qz".repeat(4).slice(0, 31).toLowerCase();
+    const findings = scanLine(line(`const bittrex_secret_key = "${value}";`));
+    expect(findings.some((f) => f.ruleId === "bittrex-secret-key")).toBe(false);
+  });
+
+  it("flags a Confluent Access Token-shaped value when the keyword 'confluent' is nearby", () => {
+    const value = "aB3fD1x9Qz".repeat(2).slice(0, 16).toLowerCase();
+    const findings = scanLine(line(`const confluent_access_token = "${value}";`));
+    expect(findings.some((f) => f.ruleId === "confluent-access-token" && f.confidence === "generic")).toBe(true);
+  });
+
+  it("does not flag a 16-char value shaped like a Confluent Access Token without the keyword nearby", () => {
+    const value = "aB3fD1x9Qz".repeat(2).slice(0, 16).toLowerCase();
+    const findings = scanLine(line(`const unrelated_var = "${value}";`));
+    expect(findings.some((f) => f.ruleId === "confluent-access-token")).toBe(false);
+  });
+
+  it("does not flag a Confluent Access Token-shaped value that is one character short even with the keyword nearby", () => {
+    const value = "aB3fD1x9Qz".repeat(2).slice(0, 15).toLowerCase();
+    const findings = scanLine(line(`const confluent_access_token = "${value}";`));
+    expect(findings.some((f) => f.ruleId === "confluent-access-token")).toBe(false);
+  });
+
+  it("flags a Confluent Secret Key-shaped value when the keyword 'confluent' is nearby", () => {
+    const value = "aB3fD1x9Qz".repeat(7).slice(0, 64).toLowerCase();
+    const findings = scanLine(line(`const confluent_secret_key = "${value}";`));
+    expect(findings.some((f) => f.ruleId === "confluent-secret-key" && f.confidence === "generic")).toBe(true);
+  });
+
+  it("does not flag a 64-char value shaped like a Confluent Secret Key without the keyword nearby", () => {
+    const value = "aB3fD1x9Qz".repeat(7).slice(0, 64).toLowerCase();
+    const findings = scanLine(line(`const unrelated_var = "${value}";`));
+    expect(findings.some((f) => f.ruleId === "confluent-secret-key")).toBe(false);
+  });
+
+  it("does not flag a Confluent Secret Key-shaped value that is one character short even with the keyword nearby", () => {
+    const value = "aB3fD1x9Qz".repeat(7).slice(0, 63).toLowerCase();
+    const findings = scanLine(line(`const confluent_secret_key = "${value}";`));
+    expect(findings.some((f) => f.ruleId === "confluent-secret-key")).toBe(false);
+  });
+
+  it("flags a Fastly API Token-shaped value when the keyword 'fastly' is nearby", () => {
+    const value = "aB3fD1x9Qz".repeat(4).slice(0, 32).toLowerCase();
+    const findings = scanLine(line(`const fastly_api_token = "${value}";`));
+    expect(findings.some((f) => f.ruleId === "fastly-api-token" && f.confidence === "generic")).toBe(true);
+  });
+
+  it("does not flag a 32-char value shaped like a Fastly API Token without the keyword nearby", () => {
+    const value = "aB3fD1x9Qz".repeat(4).slice(0, 32).toLowerCase();
+    const findings = scanLine(line(`const unrelated_var = "${value}";`));
+    expect(findings.some((f) => f.ruleId === "fastly-api-token")).toBe(false);
+  });
+
+  it("does not flag a Fastly API Token-shaped value that is one character short even with the keyword nearby", () => {
+    const value = "aB3fD1x9Qz".repeat(4).slice(0, 31).toLowerCase();
+    const findings = scanLine(line(`const fastly_api_token = "${value}";`));
+    expect(findings.some((f) => f.ruleId === "fastly-api-token")).toBe(false);
+  });
+
+  it("flags a Finicity API Token-shaped value when the keyword 'finicity' is nearby", () => {
+    const value = "b".repeat(32);
+    const findings = scanLine(line(`const finicity_api_token = "${value}";`));
+    expect(findings.some((f) => f.ruleId === "finicity-api-token" && f.confidence === "generic")).toBe(true);
+  });
+
+  it("does not flag a 32-char hex value shaped like a Finicity API Token without the keyword nearby", () => {
+    const value = "b".repeat(32);
+    const findings = scanLine(line(`const unrelated_var = "${value}";`));
+    expect(findings.some((f) => f.ruleId === "finicity-api-token")).toBe(false);
+  });
+
+  it("does not flag a Finicity API Token-shaped value that is one character short even with the keyword nearby", () => {
+    const value = "b".repeat(31);
+    const findings = scanLine(line(`const finicity_api_token = "${value}";`));
+    expect(findings.some((f) => f.ruleId === "finicity-api-token")).toBe(false);
+  });
+
+  it("flags a Finicity Client Secret-shaped value when the keyword 'finicity' is nearby", () => {
+    const value = "aB3fD1x9Qz".repeat(2).slice(0, 20).toLowerCase();
+    const findings = scanLine(line(`const finicity_client_secret = "${value}";`));
+    expect(findings.some((f) => f.ruleId === "finicity-client-secret" && f.confidence === "generic")).toBe(true);
+  });
+
+  it("does not flag a 20-char value shaped like a Finicity Client Secret without the keyword nearby", () => {
+    const value = "aB3fD1x9Qz".repeat(2).slice(0, 20).toLowerCase();
+    const findings = scanLine(line(`const unrelated_var = "${value}";`));
+    expect(findings.some((f) => f.ruleId === "finicity-client-secret")).toBe(false);
+  });
+
+  it("does not flag a Finicity Client Secret-shaped value that is one character short even with the keyword nearby", () => {
+    const value = "aB3fD1x9Qz".repeat(2).slice(0, 19).toLowerCase();
+    const findings = scanLine(line(`const finicity_client_secret = "${value}";`));
+    expect(findings.some((f) => f.ruleId === "finicity-client-secret")).toBe(false);
+  });
+
+  it("flags a Finnhub Access Token-shaped value when the keyword 'finnhub' is nearby", () => {
+    const value = "aB3fD1x9Qz".repeat(2).slice(0, 20).toLowerCase();
+    const findings = scanLine(line(`const finnhub_access_token = "${value}";`));
+    expect(findings.some((f) => f.ruleId === "finnhub-access-token" && f.confidence === "generic")).toBe(true);
+  });
+
+  it("does not flag a 20-char value shaped like a Finnhub Access Token without the keyword nearby", () => {
+    const value = "aB3fD1x9Qz".repeat(2).slice(0, 20).toLowerCase();
+    const findings = scanLine(line(`const unrelated_var = "${value}";`));
+    expect(findings.some((f) => f.ruleId === "finnhub-access-token")).toBe(false);
+  });
+
+  it("does not flag a Finnhub Access Token-shaped value that is one character short even with the keyword nearby", () => {
+    const value = "aB3fD1x9Qz".repeat(2).slice(0, 19).toLowerCase();
+    const findings = scanLine(line(`const finnhub_access_token = "${value}";`));
+    expect(findings.some((f) => f.ruleId === "finnhub-access-token")).toBe(false);
+  });
+
+  it("flags a Flickr Access Token-shaped value when the keyword 'flickr' is nearby", () => {
+    const value = "aB3fD1x9Qz".repeat(4).slice(0, 32).toLowerCase();
+    const findings = scanLine(line(`const flickr_access_token = "${value}";`));
+    expect(findings.some((f) => f.ruleId === "flickr-access-token" && f.confidence === "generic")).toBe(true);
+  });
+
+  it("does not flag a 32-char value shaped like a Flickr Access Token without the keyword nearby", () => {
+    const value = "aB3fD1x9Qz".repeat(4).slice(0, 32).toLowerCase();
+    const findings = scanLine(line(`const unrelated_var = "${value}";`));
+    expect(findings.some((f) => f.ruleId === "flickr-access-token")).toBe(false);
+  });
+
+  it("does not flag a Flickr Access Token-shaped value that is one character short even with the keyword nearby", () => {
+    const value = "aB3fD1x9Qz".repeat(4).slice(0, 31).toLowerCase();
+    const findings = scanLine(line(`const flickr_access_token = "${value}";`));
+    expect(findings.some((f) => f.ruleId === "flickr-access-token")).toBe(false);
+  });
+
+  it("flags a Freshbooks Access Token-shaped value when the keyword 'freshbooks' is nearby", () => {
+    const value = "aB3fD1x9Qz".repeat(7).slice(0, 64).toLowerCase();
+    const findings = scanLine(line(`const freshbooks_access_token = "${value}";`));
+    expect(findings.some((f) => f.ruleId === "freshbooks-access-token" && f.confidence === "generic")).toBe(true);
+  });
+
+  it("does not flag a 64-char value shaped like a Freshbooks Access Token without the keyword nearby", () => {
+    const value = "aB3fD1x9Qz".repeat(7).slice(0, 64).toLowerCase();
+    const findings = scanLine(line(`const unrelated_var = "${value}";`));
+    expect(findings.some((f) => f.ruleId === "freshbooks-access-token")).toBe(false);
+  });
+
+  it("does not flag a Freshbooks Access Token-shaped value that is one character short even with the keyword nearby", () => {
+    const value = "aB3fD1x9Qz".repeat(7).slice(0, 63).toLowerCase();
+    const findings = scanLine(line(`const freshbooks_access_token = "${value}";`));
+    expect(findings.some((f) => f.ruleId === "freshbooks-access-token")).toBe(false);
+  });
+
+  it("flags an Alibaba Cloud Secret Key-shaped value when the keyword 'alibaba' is nearby", () => {
+    const value = "aB3fD1x9Qz".repeat(3).slice(0, 30).toLowerCase();
+    const findings = scanLine(line(`const alibaba_secret_key = "${value}";`));
+    expect(findings.some((f) => f.ruleId === "alibaba-secret-key" && f.confidence === "generic")).toBe(true);
+  });
+
+  it("does not flag a 30-char value shaped like an Alibaba Cloud Secret Key without the keyword nearby", () => {
+    const value = "aB3fD1x9Qz".repeat(3).slice(0, 30).toLowerCase();
+    const findings = scanLine(line(`const unrelated_var = "${value}";`));
+    expect(findings.some((f) => f.ruleId === "alibaba-secret-key")).toBe(false);
+  });
+
+  it("does not flag an Alibaba Cloud Secret Key-shaped value that is one character short even with the keyword nearby", () => {
+    const value = "aB3fD1x9Qz".repeat(3).slice(0, 29).toLowerCase();
+    const findings = scanLine(line(`const alibaba_secret_key = "${value}";`));
+    expect(findings.some((f) => f.ruleId === "alibaba-secret-key")).toBe(false);
+  });
+
+  it("flags a Facebook App Secret-shaped value when the keyword 'facebook' is nearby", () => {
+    const value = "b".repeat(32);
+    const findings = scanLine(line(`const facebook_secret = "${value}";`));
+    expect(findings.some((f) => f.ruleId === "facebook-secret" && f.confidence === "generic")).toBe(true);
+  });
+
+  it("does not flag a 32-char hex value shaped like a Facebook App Secret without the keyword nearby", () => {
+    const value = "b".repeat(32);
+    const findings = scanLine(line(`const unrelated_var = "${value}";`));
+    expect(findings.some((f) => f.ruleId === "facebook-secret")).toBe(false);
+  });
+
+  it("does not flag a Facebook App Secret-shaped value that is one character short even with the keyword nearby", () => {
+    const value = "b".repeat(31);
+    const findings = scanLine(line(`const facebook_secret = "${value}";`));
+    expect(findings.some((f) => f.ruleId === "facebook-secret")).toBe(false);
+  });
+
   it("flags a generic high-entropy value assigned to a secret-like variable name", () => {
     const findings = scanLine(line(`const apiToken = "zT9pQ2xR7mK4vL8nW1sD6fH3jC0bA5eY";`));
     expect(findings.some((f) => f.ruleId === "generic-high-entropy-secret" && f.confidence === "generic")).toBe(

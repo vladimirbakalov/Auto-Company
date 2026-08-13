@@ -739,6 +739,130 @@ export const PATTERN_RULES: PatternRule[] = [
       /[\w.-]{0,50}?beamer(?:[ \t\w.-]{0,20})[\s'"]{0,3}(?:=|>|:{1,3}=|\|\||:|=>|\?=|,)[`'"\s=]{0,5}(b_[a-z0-9=_-]{44})(?:[`'"\s;]|\\[nr]|$)/gi,
     confidence: "generic",
   },
+  {
+    id: "bittrex-access-key",
+    description: "Bittrex Access Key (contextual)",
+    // Same keyword-proximity shape. Value is a bare 32-char lowercase-alnum
+    // value, gated on "bittrex" appearing before the assignment. "generic"
+    // tier for the same reason as the rest of this class.
+    build: () =>
+      /[\w.-]{0,50}?bittrex(?:[ \t\w.-]{0,20})[\s'"]{0,3}(?:=|>|:{1,3}=|\|\||:|=>|\?=|,)[`'"\s=]{0,5}([a-z0-9]{32})(?:[`'"\s;]|\\[nr]|$)/gi,
+    confidence: "generic",
+  },
+  {
+    id: "bittrex-secret-key",
+    description: "Bittrex Secret Key (contextual)",
+    // Same keyword-proximity shape and "bittrex" keyword gate as
+    // bittrex-access-key above; same value shape (32-char lowercase-alnum)
+    // but a distinct id, mirroring how gitleaks splits access/secret pairs
+    // under one keyword. "generic" tier for the same reason as the rest of
+    // this class.
+    build: () =>
+      /[\w.-]{0,50}?bittrex(?:[ \t\w.-]{0,20})[\s'"]{0,3}(?:=|>|:{1,3}=|\|\||:|=>|\?=|,)[`'"\s=]{0,5}([a-z0-9]{32})(?:[`'"\s;]|\\[nr]|$)/gi,
+    confidence: "generic",
+  },
+  {
+    id: "confluent-access-token",
+    description: "Confluent Access Token (contextual)",
+    // Same keyword-proximity shape. Value is a bare 16-char lowercase-alnum
+    // value, gated on "confluent" appearing before the assignment. "generic"
+    // tier for the same reason as the rest of this class.
+    build: () =>
+      /[\w.-]{0,50}?confluent(?:[ \t\w.-]{0,20})[\s'"]{0,3}(?:=|>|:{1,3}=|\|\||:|=>|\?=|,)[`'"\s=]{0,5}([a-z0-9]{16})(?:[`'"\s;]|\\[nr]|$)/gi,
+    confidence: "generic",
+  },
+  {
+    id: "confluent-secret-key",
+    description: "Confluent Secret Key (contextual)",
+    // Same keyword-proximity shape and "confluent" keyword gate as
+    // confluent-access-token above, but a distinct value shape (64-char
+    // lowercase-alnum) distinguishes it as its own rule — same
+    // two-rules-one-keyword pattern used for bittrex above.
+    build: () =>
+      /[\w.-]{0,50}?confluent(?:[ \t\w.-]{0,20})[\s'"]{0,3}(?:=|>|:{1,3}=|\|\||:|=>|\?=|,)[`'"\s=]{0,5}([a-z0-9]{64})(?:[`'"\s;]|\\[nr]|$)/gi,
+    confidence: "generic",
+  },
+  {
+    id: "fastly-api-token",
+    description: "Fastly API Token (contextual)",
+    // Same keyword-proximity shape. Value is a bare 32-char alnum/=/_/- value,
+    // gated on "fastly" appearing before the assignment. "generic" tier for
+    // the same reason as the rest of this class.
+    build: () =>
+      /[\w.-]{0,50}?fastly(?:[ \t\w.-]{0,20})[\s'"]{0,3}(?:=|>|:{1,3}=|\|\||:|=>|\?=|,)[`'"\s=]{0,5}([a-z0-9=_-]{32})(?:[`'"\s;]|\\[nr]|$)/gi,
+    confidence: "generic",
+  },
+  {
+    id: "finicity-api-token",
+    description: "Finicity API Token (contextual)",
+    // Same keyword-proximity shape. Value is a bare 32-char hex value, gated
+    // on "finicity" appearing before the assignment. "generic" tier for the
+    // same reason as the rest of this class.
+    build: () =>
+      /[\w.-]{0,50}?finicity(?:[ \t\w.-]{0,20})[\s'"]{0,3}(?:=|>|:{1,3}=|\|\||:|=>|\?=|,)[`'"\s=]{0,5}([a-f0-9]{32})(?:[`'"\s;]|\\[nr]|$)/gi,
+    confidence: "generic",
+  },
+  {
+    id: "finicity-client-secret",
+    description: "Finicity Client Secret (contextual)",
+    // Same keyword-proximity shape and "finicity" keyword gate as
+    // finicity-api-token above, but a distinct value shape (20-char
+    // lowercase-alnum, not hex) distinguishes it as its own rule — same
+    // two-rules-one-keyword pattern used for bittrex and confluent above.
+    build: () =>
+      /[\w.-]{0,50}?finicity(?:[ \t\w.-]{0,20})[\s'"]{0,3}(?:=|>|:{1,3}=|\|\||:|=>|\?=|,)[`'"\s=]{0,5}([a-z0-9]{20})(?:[`'"\s;]|\\[nr]|$)/gi,
+    confidence: "generic",
+  },
+  {
+    id: "finnhub-access-token",
+    description: "Finnhub Access Token (contextual)",
+    // Same keyword-proximity shape. Value is a bare 20-char lowercase-alnum
+    // value, gated on "finnhub" appearing before the assignment. "generic"
+    // tier for the same reason as the rest of this class.
+    build: () =>
+      /[\w.-]{0,50}?finnhub(?:[ \t\w.-]{0,20})[\s'"]{0,3}(?:=|>|:{1,3}=|\|\||:|=>|\?=|,)[`'"\s=]{0,5}([a-z0-9]{20})(?:[`'"\s;]|\\[nr]|$)/gi,
+    confidence: "generic",
+  },
+  {
+    id: "flickr-access-token",
+    description: "Flickr Access Token (contextual)",
+    // Same keyword-proximity shape. Value is a bare 32-char lowercase-alnum
+    // value, gated on "flickr" appearing before the assignment. "generic"
+    // tier for the same reason as the rest of this class.
+    build: () =>
+      /[\w.-]{0,50}?flickr(?:[ \t\w.-]{0,20})[\s'"]{0,3}(?:=|>|:{1,3}=|\|\||:|=>|\?=|,)[`'"\s=]{0,5}([a-z0-9]{32})(?:[`'"\s;]|\\[nr]|$)/gi,
+    confidence: "generic",
+  },
+  {
+    id: "freshbooks-access-token",
+    description: "Freshbooks Access Token (contextual)",
+    // Same keyword-proximity shape. Value is a bare 64-char lowercase-alnum
+    // value, gated on "freshbooks" appearing before the assignment.
+    // "generic" tier for the same reason as the rest of this class.
+    build: () =>
+      /[\w.-]{0,50}?freshbooks(?:[ \t\w.-]{0,20})[\s'"]{0,3}(?:=|>|:{1,3}=|\|\||:|=>|\?=|,)[`'"\s=]{0,5}([a-z0-9]{64})(?:[`'"\s;]|\\[nr]|$)/gi,
+    confidence: "generic",
+  },
+  {
+    id: "alibaba-secret-key",
+    description: "Alibaba Cloud Secret Key (contextual)",
+    // Same keyword-proximity shape. Value is a bare 30-char lowercase-alnum
+    // value, gated on "alibaba" appearing before the assignment. "generic"
+    // tier for the same reason as the rest of this class.
+    build: () =>
+      /[\w.-]{0,50}?alibaba(?:[ \t\w.-]{0,20})[\s'"]{0,3}(?:=|>|:{1,3}=|\|\||:|=>|\?=|,)[`'"\s=]{0,5}([a-z0-9]{30})(?:[`'"\s;]|\\[nr]|$)/gi,
+    confidence: "generic",
+  },
+  {
+    id: "facebook-secret",
+    description: "Facebook App Secret (contextual)",
+    // Same keyword-proximity shape. Value is a bare 32-char hex value, gated
+    // on "facebook" appearing before the assignment. "generic" tier for the
+    // same reason as the rest of this class.
+    build: () =>
+      /[\w.-]{0,50}?facebook(?:[ \t\w.-]{0,20})[\s'"]{0,3}(?:=|>|:{1,3}=|\|\||:|=>|\?=|,)[`'"\s=]{0,5}([a-f0-9]{32})(?:[`'"\s;]|\\[nr]|$)/gi,
+    confidence: "generic",
+  },
 ];
 
 /**
