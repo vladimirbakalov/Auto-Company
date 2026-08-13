@@ -254,6 +254,23 @@ describe('snapog routes', () => {
       expect(key.tier).toBe('free');
     });
 
+    it('always creates a free-tier key, ignoring a client-submitted "pro"/"business" tier field', async () => {
+      // Regression test for the exact gap this cycle closes: POST /register
+      // used to trust `tier` straight from the form body, so anyone could
+      // POST tier=business and get a paid tier for free. Now the only path
+      // that may write a tier above 'free' is the Stripe webhook
+      // (src/billing/routes.ts), after a real subscription is confirmed.
+      const res = await app.request(
+        '/register',
+        { method: 'POST', body: new URLSearchParams({ email: 'payer@example.com', tier: 'business' }) },
+        env
+      );
+      expect(res.status).toBe(200);
+      const [key] = [...db.apiKeys.values()];
+      expect(key.tier).toBe('free');
+      expect(key.monthly_limit).toBe(100);
+    });
+
     it('reuses the existing user on a duplicate email (upsert, not duplicate insert)', async () => {
       await app.request(
         '/register',
@@ -368,7 +385,15 @@ describe('snapog routes', () => {
     });
 
     it('omits the watermark for a paid tier', async () => {
-      const rawKey = await registerKey('pro');
+      // Paid tiers can no longer be granted via the /register form (see the
+      // "always creates a free-tier key" test below) — simulate the state a
+      // real Stripe webhook-driven upgrade would leave behind by mutating
+      // the stored row directly, same pattern as the 429/reset tests below.
+      const rawKey = await registerKey('free');
+      const hash = await sha256(rawKey);
+      const key = [...db.apiKeys.values()].find(k => k.key_hash === hash)!;
+      key.tier = 'pro';
+
       await app.request(`/og?title=Hello&key=${rawKey}`, {}, env, fakeExecutionContext());
       expect(generateOGImageMock.mock.calls[0][1]).toBe(false);
     });

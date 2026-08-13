@@ -1,7 +1,16 @@
 // SnapOG — Dashboard & landing page HTML
 // Aesthetic: "Carbon Terminal" — dark developer tool, amber accent, monospace-first
 
-import type { ApiKey } from '../types';
+import type { ApiKey, Tier } from '../types';
+
+// Display-only price strings for the two paid tiers. Not sourced from
+// Stripe (no API call needed to render a checkout button) — matches the
+// $19/$49 figures already hardcoded in the pricing section below and in
+// README.md. If pricing ever changes, update both places.
+const TIER_PRICE_DISPLAY: Record<'pro' | 'business', string> = {
+  pro: '$19/mo',
+  business: '$49/mo',
+};
 
 // Escape a string for safe interpolation into HTML text/attribute contexts.
 // Every value that ultimately traces back to a request (query param, form
@@ -643,7 +652,37 @@ export function registerPage(error?: string, tier?: string): string {
   return layout('Get API Key', body);
 }
 
-export function keyCreatedPage(rawKey: string, email: string, tier: string, nonce: string): string {
+export function keyCreatedPage(
+  rawKey: string,
+  email: string,
+  tier: string,
+  nonce: string,
+  upsellTier?: Tier
+): string {
+  // Registration always creates a free-tier key (see src/index.ts) — a paid
+  // tier is only ever granted after a real Stripe subscription via the
+  // webhook. If the visitor originally clicked "Start Pro"/"Start Business"
+  // on the pricing page, upsellTier carries that intent through so this
+  // page can offer a one-click continue-to-checkout button instead of
+  // silently dropping them on the free tier with no path forward.
+  const upsell =
+    upsellTier && upsellTier !== 'free'
+      ? `
+      <div class="card" style="margin-top:20px;border-color:var(--accent-dim);">
+        <p class="card-title">Continue to ${upsellTier.toUpperCase()}</p>
+        <p style="font-size:14px;color:var(--text-2);margin-bottom:16px;">
+          Your free key is ready. Subscribe now to unlock ${upsellTier === 'pro' ? '10,000' : '100,000'} images/month, no watermark, and more.
+        </p>
+        <form method="POST" action="/billing/checkout">
+          <input type="hidden" name="key" value="${escapeHtml(rawKey)}" />
+          <input type="hidden" name="tier" value="${escapeHtml(upsellTier)}" />
+          <button type="submit" class="btn btn-primary" style="width:100%;">
+            Subscribe to ${upsellTier[0].toUpperCase()}${upsellTier.slice(1)} — ${TIER_PRICE_DISPLAY[upsellTier]} →
+          </button>
+        </form>
+      </div>`
+      : '';
+
   const body = `
   ${nav()}
   <section class="section">
@@ -666,9 +705,10 @@ export function keyCreatedPage(rawKey: string, email: string, tier: string, nonc
           <button class="btn btn-primary" data-copy="${rawKey}" style="white-space:nowrap;">Copy</button>
         </div>
         <p style="font-size:12px;color:var(--text-3);margin-top:12px;font-family:var(--font-mono);">
-          Free tier: 100 images/month · Resets monthly · ${tier === 'pro' ? '10,000 images' : 'upgrade anytime'}
+          Free tier: 100 images/month · Resets monthly · upgrade anytime
         </p>
       </div>
+      ${upsell}
 
       <div class="code-block" style="margin-top:32px;">
         <div class="code-block-header">
@@ -703,7 +743,7 @@ export function keyCreatedPage(rawKey: string, email: string, tier: string, nonc
   return layout('API Key Created', body);
 }
 
-export function dashboardPage(key: ApiKey, recentCount: number): string {
+export function dashboardPage(key: ApiKey, recentCount: number, rawKey: string): string {
   const pct = Math.round((key.usage_count / key.monthly_limit) * 100);
   const barClass = pct >= 100 ? 'full' : pct >= 80 ? 'warn' : '';
   const resetDate = new Date(key.usage_reset_at);
@@ -711,14 +751,26 @@ export function dashboardPage(key: ApiKey, recentCount: number): string {
     .toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
 
   const tierBadge = `<span class="tier-badge tier-${key.tier}">${key.tier}</span>`;
+  // Encode for the URL first, then escape for safe HTML-attribute
+  // embedding (the raw key is always `sk_` + hex so neither step actually
+  // changes anything here, but this is the correct order in general).
+  const rawKeyForUrl = escapeHtml(encodeURIComponent(rawKey));
+  const rawKeyForAttr = escapeHtml(rawKey);
 
   const body = `
   ${nav()}
   <div class="container">
     <div class="dash-layout">
-      <div class="dash-header">
-        <h1>Dashboard ${tierBadge}</h1>
-        <p>API key: <code style="font-family:var(--font-mono);font-size:13px;color:var(--text-2);">${key.key_prefix}••••••••••••••••••••</code></p>
+      <div class="dash-header" style="display:flex;align-items:flex-start;justify-content:space-between;gap:16px;flex-wrap:wrap;">
+        <div>
+          <h1>Dashboard ${tierBadge}</h1>
+          <p>API key: <code style="font-family:var(--font-mono);font-size:13px;color:var(--text-2);">${key.key_prefix}••••••••••••••••••••</code></p>
+        </div>
+        ${
+          key.tier !== 'free'
+            ? `<a href="/billing/portal?key=${rawKeyForUrl}" class="btn btn-ghost">Manage billing →</a>`
+            : ''
+        }
       </div>
 
       <div class="dash-grid">
@@ -739,7 +791,11 @@ export function dashboardPage(key: ApiKey, recentCount: number): string {
             key.tier === 'free'
               ? `<div style="margin-top:20px;padding-top:20px;border-top:1px solid var(--border);">
                    <p style="font-size:13px;color:var(--text-2);">Need more?</p>
-                   <a href="/register?tier=pro" class="btn btn-primary" style="margin-top:10px;">Upgrade to Pro — $19/mo →</a>
+                   <form method="POST" action="/billing/checkout" style="margin-top:10px;">
+                     <input type="hidden" name="key" value="${rawKeyForAttr}" />
+                     <input type="hidden" name="tier" value="pro" />
+                     <button type="submit" class="btn btn-primary">Upgrade to Pro — ${TIER_PRICE_DISPLAY.pro} →</button>
+                   </form>
                  </div>`
               : ''
           }

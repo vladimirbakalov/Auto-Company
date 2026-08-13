@@ -3,6 +3,7 @@
 
 import { Hono } from 'hono';
 import { generateOGImage, buildCacheKey } from './og/render';
+import { billingRoutes } from './billing/routes';
 import {
   landingPage,
   registerPage,
@@ -14,6 +15,8 @@ import type { ApiKey, Env, OGParams, Tier } from './types';
 import { TIER_LIMITS } from './types';
 
 const app = new Hono<{ Bindings: Env }>();
+
+app.route('/billing', billingRoutes);
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 
@@ -241,12 +244,16 @@ app.get('/register', c => {
 });
 
 app.post('/register', async c => {
-  let email: string, keyname: string, tier: string;
+  let email: string, keyname: string, requestedTier: string;
   try {
     const form = await c.req.formData();
     email = (form.get('email') as string ?? '').trim().toLowerCase();
     keyname = (form.get('keyname') as string ?? '').trim() || 'default';
-    tier = (form.get('tier') as string ?? 'free').trim();
+    // `tier` here is NEVER trusted to set the actual tier — see safeTier
+    // below. It's only used to decide which upsell CTA to show on the
+    // key-created page (e.g. someone who clicked "Start Pro" still sees a
+    // "continue to checkout" button after their free key is created).
+    requestedTier = (form.get('tier') as string ?? 'free').trim();
   } catch {
     return htmlResponseWithNonce(() => registerPage('Invalid form data'), 400);
   }
@@ -256,11 +263,17 @@ app.post('/register', async c => {
   // since the original pattern happily accepted a local-part like
   // `<script>alert(1)</script>` as a "valid" email.
   if (!email || !/^[^\s@<>"'&]+@[^\s@<>"'&]+\.[^\s@<>"'&]+$/.test(email)) {
-    return htmlResponseWithNonce(() => registerPage('Please enter a valid email address', tier), 400);
+    return htmlResponseWithNonce(() => registerPage('Please enter a valid email address', requestedTier), 400);
   }
 
-  const validTiers: Tier[] = ['free', 'pro', 'business'];
-  const safeTier: Tier = validTiers.includes(tier as Tier) ? (tier as Tier) : 'free';
+  // Every key created here is 'free', full stop. Paid tiers are only ever
+  // granted by the Stripe webhook (src/billing/routes.ts) after a real
+  // subscription is confirmed — this used to trust a client-submitted
+  // `tier` form field directly, which meant anyone could POST `tier=business`
+  // and get a paid tier for free. `requestedTier` above is display-only.
+  const safeTier: Tier = 'free';
+  const upsellTier: Tier | undefined =
+    requestedTier === 'pro' || requestedTier === 'business' ? requestedTier : undefined;
 
   // Upsert user
   const userId = crypto.randomUUID();
@@ -296,7 +309,7 @@ app.post('/register', async c => {
     .bind(keyId, user.id, keyname, keyPrefix, keyHash, safeTier, monthlyLimit, resetAt)
     .run();
 
-  return htmlResponseWithNonce(nonce => keyCreatedPage(rawKey, email, safeTier, nonce));
+  return htmlResponseWithNonce(nonce => keyCreatedPage(rawKey, email, safeTier, nonce, upsellTier));
 });
 
 // ── Dashboard ─────────────────────────────────────────────────────────────────
@@ -322,7 +335,7 @@ app.get('/dashboard', async c => {
     .bind(refreshed.id, yesterday)
     .first<{ cnt: number }>();
 
-  return htmlResponseWithNonce(() => dashboardPage(refreshed, recent?.cnt ?? 0));
+  return htmlResponseWithNonce(() => dashboardPage(refreshed, recent?.cnt ?? 0, rawKey));
 });
 
 // ── Health / ops ──────────────────────────────────────────────────────────────

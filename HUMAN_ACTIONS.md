@@ -402,7 +402,70 @@ become orphaned/invalid** and the next attempt will need fresh ones
 (cheap to redo, just tell the agent to try again and be ready to click
 within the hour).
 
-### 4. Resend (for vibecheck/snapog transactional email)
+### 4. Stripe test-mode billing (snapog)
+**New, Cycle #125.** fullstack-dhh built Stripe test-mode billing for snapog
+this cycle (checkout, webhook handler, tier upgrades) and qa-bach reviewed it
+clean (49/49 unit tests, 5/5 workers tests, typecheck clean, no
+release-blocking bugs — `docs/qa/snapog-billing-qa-cycle125.md`,
+`docs/fullstack/snapog-billing-cycle125.md`). Nothing is deployed yet. The
+code degrades gracefully with billing unconfigured today — billing routes
+return 503, everything else (registration, API keys, OG generation) is
+unaffected — so this is not blocking anything, it's purely additive revenue
+infrastructure waiting on credentials.
+
+**Depends on item #3 above (the Cloudflare API token) — do that first.**
+Every step below needs `wrangler secret put` against snapog's real,
+permanent Worker, which needs the permanent API token, not another
+`--temporary` claim-window account (those self-destruct, so secrets set on
+one would be lost anyway, and snapog's `--temporary` live URL — currently
+`https://snapog.stone-rondeletia.workers.dev`, see the Cycle #123 entry
+above — is itself a temp-account subdomain that may already be gone or may
+change on the next redeploy). Doing this item before item #3 means redoing
+it.
+
+Once a permanent Cloudflare account + API token exist:
+
+1. Create a Stripe account (or use an existing one) and switch to **test
+   mode** (toggle top-right of the Stripe dashboard).
+2. Create two recurring Price objects matching the README's tiers:
+   - **Pro** — $19/month recurring
+   - **Business** — $49/month recurring
+   Dashboard → Product catalog → Add product → set a recurring price on
+   each. Note the two `price_...` ids.
+3. Grab the test-mode secret key: Developers → API keys → **Secret key**
+   (starts `sk_test_...`, test mode only — do not use the live key).
+4. Create a webhook endpoint: Developers → Webhooks → Add endpoint.
+   - URL: `https://<snapog-live-url>/billing/webhook` — use whatever
+     permanent URL snapog ends up on after item #3's redeploy (a stable
+     `workers.dev` subdomain or custom domain), not the current temporary
+     one, which will be dead by the time this runs.
+   - Events to subscribe to (minimum): `checkout.session.completed`,
+     `customer.subscription.updated`, `customer.subscription.deleted`.
+   - Note the endpoint's **signing secret** (`whsec_...`).
+5. Set all four as Worker secrets, from inside `projects/snapog/`:
+   ```bash
+   wrangler secret put STRIPE_SECRET_KEY          # sk_test_...
+   wrangler secret put STRIPE_WEBHOOK_SECRET       # whsec_...
+   wrangler secret put STRIPE_PRICE_ID_PRO         # price_...
+   wrangler secret put STRIPE_PRICE_ID_BUSINESS    # price_...
+   ```
+6. Apply the new migration to the live database (also blocked on item #3's
+   token, and not yet run):
+   ```bash
+   npm run db:remote   # runs `wrangler d1 migrations apply snapog-db`,
+                        # applies projects/snapog/migrations/0002_billing.sql
+                        # (adds stripe_customer_id / stripe_subscription_id /
+                        # stripe_subscription_status columns) to the real D1
+   ```
+
+Verified this cycle (devops-hightower, without cloud credentials — the one
+check possible offline): `0002_billing.sql` applies cleanly on top of
+`0001_init.sql` against a local/simulated D1 (`npm run db:local`,
+`.wrangler/state/v3/d1`) — both migrations report `✅`, and the resulting
+schema has the three new columns and two new indexes exactly as designed.
+No reason to expect the remote apply to behave differently.
+
+### 5. Resend (for vibecheck/snapog transactional email)
 Sign up at resend.com, verify a sending domain, then:
 ```bash
 wrangler secret put RESEND_API_KEY
@@ -412,7 +475,7 @@ the secret to).
 
 ## Optional, low priority
 
-### 5. `npm adduser` / `npm login`
+### 6. `npm adduser` / `npm login`
 Would let the agent `npm publish secretguard-mcp` directly instead of relying
 on `npx github:...`. Not required — the GitHub-based install already works
 end-to-end (verified Cycle #24 with a real `npx -y github:...` handshake).
@@ -425,7 +488,7 @@ throwaway `0.0.1`) before OIDC can take over for every release after that.
 Only actionable if npm distribution ever becomes load-bearing; still isn't
 today.
 
-### 6. Delete a harmless throwaway repo
+### 7. Delete a harmless throwaway repo
 Cycle #97's end-to-end QA smoke test created
 `github.com/vladimirbakalov/secret-scan-action-smoketest-c97` to verify the
 real PR-comment flow. The agent's token lacks the `delete_repo` scope, so

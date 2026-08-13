@@ -19,6 +19,9 @@ export interface ApiKey {
   usage_count: number;
   usage_reset_at: string;
   created_at: string;
+  // Added in migrations/0002_billing.sql — null until a checkout completes.
+  stripe_subscription_id?: string | null;
+  stripe_subscription_status?: string | null;
 }
 
 export interface OGParams {
@@ -39,4 +42,13 @@ export interface Env {
   OG_CACHE?: R2Bucket;
   ENVIRONMENT: string;
   AUTH_SECRET?: string;
+  // Stripe billing (all optional, same graceful-degrade pattern as
+  // OG_CACHE): a deploy without these set must not crash — see
+  // src/billing/stripe.ts's getStripe() and the 503 responses in
+  // src/billing/routes.ts. Set via `wrangler secret put` once a real
+  // Stripe account exists (see docs/fullstack/snapog-billing-cycle125.md).
+  STRIPE_SECRET_KEY?: string;
+  STRIPE_WEBHOOK_SECRET?: string;
+  STRIPE_PRICE_ID_PRO?: string;
+  STRIPE_PRICE_ID_BUSINESS?: string;
 }
