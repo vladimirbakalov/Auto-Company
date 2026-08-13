@@ -465,7 +465,73 @@ check possible offline): `0002_billing.sql` applies cleanly on top of
 schema has the three new columns and two new indexes exactly as designed.
 No reason to expect the remote apply to behave differently.
 
-### 5. Resend (for vibecheck/snapog transactional email)
+### 5. Analytics admin secret + migration (snapog + vibecheck)
+**New, Cycle #126.** Both snapog and vibecheck shipped a lightweight
+top-of-funnel `events` table this cycle (fullstack-dhh) — landing
+pageviews, register pageviews, signups for snapog; landing pageviews, scan
+submissions, checkout starts/completions for vibecheck — plus a new
+`GET /admin/stats` endpoint on each, gated by a new `ADMIN_STATS_KEY`
+secret. qa-bach signed off GO on both
+(`docs/qa/snapog-vibecheck-analytics-qa-cycle126.md`). Same
+graceful-degradation pattern as the billing secrets in item #4: with
+`ADMIN_STATS_KEY` unset (or `DB` unbound), `/admin/stats` returns 503, not
+a crash, and nothing else is affected — so this is purely additive, not
+blocking.
+
+**Depends on item #3 above (the Cloudflare API token) — same reasoning as
+item #4.** Setting a secret via `wrangler secret put` against a
+`--temporary` deploy is pointless: that account self-destructs within the
+hour, taking the secret with it. This needs a *permanent*,
+token-authenticated deploy for both snapog and vibecheck first — don't run
+these steps against either project's current temporary `*.workers.dev`
+URL.
+
+Once a permanent Cloudflare account + API token exist, for **each**
+project (`projects/snapog/` and `projects/vibecheck/`):
+
+1. Generate a random secret value (use a different value per project —
+   don't reuse the same key across snapog and vibecheck) and set it as a
+   Worker secret:
+   ```bash
+   openssl rand -hex 32   # example generator — any sufficiently random
+                           # string works; nothing here needs to match a
+                           # specific format
+   wrangler secret put ADMIN_STATS_KEY
+   ```
+   Paste the generated value when prompted. Don't write the actual value
+   into any file, commit, or doc — it only needs to live in Cloudflare's
+   secret store and wherever you keep it for your own `curl`/admin use.
+2. Apply the new migration to that project's live D1 (blocked on item #3's
+   token, not yet run against either remote database):
+   ```bash
+   npm run db:remote   # snapog:    applies migrations/0003_analytics.sql
+                        # vibecheck: applies migrations/0003_events.sql
+                        # (both add an `events` table + idx_events_type_time
+                        # index; same command name, different repo)
+   ```
+3. Verify: `curl -H "Authorization: Bearer <the value you set>" https://<live-url>/admin/stats` should return real counts (200), not 503.
+
+Verified this cycle (devops-hightower, local D1 only — no cloud
+credentials available on this machine, same unchanged blocker as item #3;
+did not touch either project's remote/production D1):
+- **snapog**: `0003_analytics.sql` applies cleanly on top of
+  `0001_init.sql` + `0002_billing.sql` (`npm run db:local`; all three
+  migrations report ✅). Resulting `events` table:
+  `id TEXT PRIMARY KEY, event_type TEXT NOT NULL, path TEXT,
+  occurred_at TEXT NOT NULL DEFAULT (datetime('now'))`, plus
+  `idx_events_type_time` on `(event_type, occurred_at)`. Insert/select
+  round-trip against the local table confirmed working.
+- **vibecheck**: `0003_events.sql` applies cleanly on top of
+  `0001_init.sql` + `0002_dashboard.sql` (fresh local D1 this run — all
+  three migrations report ✅). Resulting `events` table:
+  `id INTEGER PRIMARY KEY, event_type TEXT NOT NULL, path TEXT,
+  occurred_at TEXT NOT NULL DEFAULT (datetime('now'))`, plus the same
+  `idx_events_type_time` index shape. Insert/select round-trip confirmed
+  working.
+
+No reason to expect either remote apply to behave differently.
+
+### 6. Resend (for vibecheck/snapog transactional email)
 Sign up at resend.com, verify a sending domain, then:
 ```bash
 wrangler secret put RESEND_API_KEY

@@ -40,6 +40,11 @@ class FakeD1 {
   usersByEmail = new Map<string, { id: string; email: string }>();
   apiKeys = new Map<string, ApiKeyRow>();
   usageEvents: Array<{ id: string; api_key_id: string; template: string; cache_hit: number; generated_at: string }> = [];
+  events: Array<{ id: string; event_type: string; path: string | null }> = [];
+  // Test-only escape hatch for the "broken INSERT must not break the page
+  // response" case below — real D1 doesn't have a flag like this, a real
+  // failure would be e.g. a transient network error or schema drift.
+  failEventsInsert = false;
 
   prepare(sql: string) {
     const self = this;
@@ -115,6 +120,12 @@ class FakeD1 {
                 cache_hit,
                 generated_at: new Date().toISOString(),
               });
+            } else if (sql.includes('INSERT INTO events')) {
+              if (self.failEventsInsert) {
+                throw new Error('simulated D1 failure recording analytics event');
+              }
+              const [id, event_type, path] = args as [string, string, string | null];
+              self.events.push({ id, event_type, path });
             }
             return { success: true };
           },
@@ -208,6 +219,77 @@ describe('snapog routes', () => {
   it('unknown route returns 404', async () => {
     const res = await app.request('/does-not-exist', {}, env);
     expect(res.status).toBe(404);
+  });
+
+  describe('top-of-funnel analytics (migrations/0003_analytics.sql)', () => {
+    it('GET / records a landing_pageview event', async () => {
+      const res = await app.request('/', {}, env);
+      expect(res.status).toBe(200);
+      expect(db.events).toHaveLength(1);
+      expect(db.events[0]).toMatchObject({ event_type: 'landing_pageview', path: '/' });
+    });
+
+    it('GET /register records a register_pageview event', async () => {
+      const res = await app.request('/register', {}, env);
+      expect(res.status).toBe(200);
+      expect(db.events).toHaveLength(1);
+      expect(db.events[0]).toMatchObject({ event_type: 'register_pageview', path: '/register' });
+    });
+
+    it('POST /register records a signup event only after a key is actually created, not on a 400', async () => {
+      const badRes = await app.request(
+        '/register',
+        { method: 'POST', body: new URLSearchParams({ email: 'not-an-email' }) },
+        env
+      );
+      expect(badRes.status).toBe(400);
+      expect(db.events).toHaveLength(0); // no signup logged for the rejected submission
+
+      const okRes = await app.request(
+        '/register',
+        { method: 'POST', body: new URLSearchParams({ email: 'funnel@example.com', keyname: 'ci' }) },
+        env
+      );
+      expect(okRes.status).toBe(200);
+      expect(db.events).toHaveLength(1);
+      expect(db.events[0]).toMatchObject({ event_type: 'signup', path: '/register' });
+    });
+
+    it('does not record a duplicate signup event per hit — one per successful POST /register only', async () => {
+      await app.request(
+        '/register',
+        { method: 'POST', body: new URLSearchParams({ email: 'a@example.com', keyname: 'one' }) },
+        env
+      );
+      await app.request(
+        '/register',
+        { method: 'POST', body: new URLSearchParams({ email: 'b@example.com', keyname: 'two' }) },
+        env
+      );
+      const signups = db.events.filter(e => e.event_type === 'signup');
+      expect(signups).toHaveLength(2);
+    });
+
+    it('a failed analytics INSERT never turns into a 500 on the landing page (fire-and-forget resilience)', async () => {
+      db.failEventsInsert = true;
+      const res = await app.request('/', {}, env);
+      expect(res.status).toBe(200);
+      expect(res.headers.get('content-type')).toContain('text/html');
+      // The write was attempted and rejected — just never surfaced to the response.
+      expect(db.events).toHaveLength(0);
+    });
+
+    it('a failed analytics INSERT never turns into a 500 on POST /register either', async () => {
+      db.failEventsInsert = true;
+      const res = await app.request(
+        '/register',
+        { method: 'POST', body: new URLSearchParams({ email: 'resilient@example.com', keyname: 'ci' }) },
+        env
+      );
+      expect(res.status).toBe(200);
+      const html = await res.text();
+      expect(html).toMatch(/sk_[0-9a-f]{64}/); // key was still created despite the analytics failure
+    });
   });
 
   describe('POST /register', () => {

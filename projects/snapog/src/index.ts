@@ -2,8 +2,12 @@
 // Routes: GET /og (image gen), GET / (landing), GET/POST /register, GET /dashboard
 
 import { Hono } from 'hono';
+import type { Context } from 'hono';
 import { generateOGImage, buildCacheKey } from './og/render';
 import { billingRoutes } from './billing/routes';
+import { adminRoutes } from './admin/routes';
+import { recordEvent } from './analytics';
+import type { EventType } from './analytics';
 import {
   landingPage,
   registerPage,
@@ -17,6 +21,7 @@ import { TIER_LIMITS } from './types';
 const app = new Hono<{ Bindings: Env }>();
 
 app.route('/billing', billingRoutes);
+app.route('/admin', adminRoutes);
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 
@@ -125,10 +130,31 @@ async function recordUsageEvent(
     .run();
 }
 
+// Fire-and-forget top-of-funnel analytics write (see ./analytics.ts and
+// migrations/0003_analytics.sql). This must never slow down or fail the
+// actual page response it's attached to, so it guards two separate ways
+// that could otherwise happen: a failed INSERT (caught via .catch on the
+// write itself) and a missing ExecutionContext, e.g. some test harnesses
+// call app.request() without one, and c.executionCtx throws just on
+// *access* in that case, before waitUntil is even reached (caught via the
+// try/catch below).
+function trackEvent(c: Context<{ Bindings: Env }>, eventType: EventType, path: string | null = null): void {
+  const write = recordEvent(c.env.DB, eventType, path).catch(err => {
+    console.error(`Failed to record ${eventType} analytics event:`, err);
+  });
+  try {
+    c.executionCtx.waitUntil(write);
+  } catch {
+    // No ExecutionContext on this request — the write's own .catch above
+    // already means nothing here can throw back into the caller.
+  }
+}
+
 // ─── Routes ───────────────────────────────────────────────────────────────────
 
 // Landing page
 app.get('/', c => {
+  trackEvent(c, 'landing_pageview', '/');
   const host = new URL(c.req.url).host;
   return htmlResponseWithNonce(nonce => landingPage(host, nonce));
 });
@@ -239,6 +265,7 @@ app.get('/og', async c => {
 
 // ── Registration ──────────────────────────────────────────────────────────────
 app.get('/register', c => {
+  trackEvent(c, 'register_pageview', '/register');
   const tier = c.req.query('tier');
   return htmlResponseWithNonce(() => registerPage(undefined, tier));
 });
@@ -308,6 +335,10 @@ app.post('/register', async c => {
     )
     .bind(keyId, user.id, keyname, keyPrefix, keyHash, safeTier, monthlyLimit, resetAt)
     .run();
+
+  // Fires only once a new API key has actually been created — not on every
+  // hit to this handler, and not on the earlier 400/500 returns above.
+  trackEvent(c, 'signup', '/register');
 
   return htmlResponseWithNonce(nonce => keyCreatedPage(rawKey, email, safeTier, nonce, upsellTier));
 });

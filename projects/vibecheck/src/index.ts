@@ -71,6 +71,7 @@ import {
   findUserByApiKey,
   findUserByStripeCustomerId,
   findUserEmailById,
+  hashToken,
   updateSubscriptionStatus,
   upsertUserFromCheckout,
   validateAndConsumeMagicLink,
@@ -82,6 +83,7 @@ import {
 import { createStripeGateway, fetchActiveStripeCustomerIds, routeStripeEvent, type StripeWebhookEvent } from './stripe';
 import { fetchKnownStripeCustomerIds, findReconciliationGap } from './reconcile';
 import { sendEmail, magicLinkEmail, paymentFailedEmail, downAlertEmail, recoveredAlertEmail } from './email';
+import { recordEvent, buildAdminStats, type EventType } from './events';
 
 const SESSION_COOKIE = 'vc_session';
 
@@ -126,8 +128,32 @@ function htmlResponseWithNonce(build: (nonce: string) => string, status = 200): 
   });
 }
 
+// ── Analytics (Cycle #126): fire-and-forget event recording ────────────────
+// Never awaited by a route's critical path — scheduled via
+// ExecutionContext.waitUntil so the D1 write happens after the response is
+// already on its way back to the caller, and recordEvent() (src/events.ts)
+// swallows its own errors, so a flaky/unavailable D1 write can never surface
+// as a user-visible failure or add latency to the real response. Falls back
+// to a plain un-awaited call (no waitUntil keep-alive guarantee, but still
+// fire-and-forget) when there's no ExecutionContext — c.executionCtx *throws*
+// rather than returning undefined when unset (Hono's Context#executionCtx
+// getter), which is why this needs a try/catch rather than an `if` check;
+// `app.request()` in tests doesn't pass one unless a test explicitly does.
+function recordEventInBackground(c: Context<{ Bindings: Env }>, eventType: EventType, path?: string | null): void {
+  const promise = recordEvent(c.env.DB, eventType, path ?? null);
+  try {
+    c.executionCtx.waitUntil(promise);
+  } catch {
+    // No ExecutionContext available — the write still fires in the
+    // background (or resolves/rejects with nothing awaiting it), see above.
+  }
+}
+
 // ── Landing page + scan UI ──────────────────────────────────────────────────
-app.get('/', () => htmlResponseWithNonce(nonce => landingPage(nonce)));
+app.get('/', c => {
+  recordEventInBackground(c, 'landing_pageview', '/');
+  return htmlResponseWithNonce(nonce => landingPage(nonce));
+});
 
 // ── Scan API ─────────────────────────────────────────────────────────────────
 app.post('/api/scan', async c => {
@@ -147,6 +173,13 @@ app.post('/api/scan', async c => {
   } catch {
     return c.json({ error: 'Expected JSON body with a repoUrl field' }, 400);
   }
+
+  // Recorded once the request clears rate-limiting and has a parseable body
+  // — i.e. a real scan attempt, not a bot hammering the endpoint or a
+  // malformed request. Deliberately NOT gated on the scan's own outcome
+  // (ScanError, GitHub failures, etc. below) — "was a scan submitted" is a
+  // top-of-funnel signal, distinct from "did the scan succeed".
+  recordEventInBackground(c, 'scan_submitted', '/api/scan');
 
   try {
     const ref = parseRepoUrl(body.repoUrl ?? '');
@@ -615,6 +648,13 @@ app.post('/api/checkout', async c => {
       cancelUrl,
       metadata: deployedUrl ? { deployed_url: deployedUrl } : undefined,
     });
+    // "Started" means Stripe actually issued a session the user is about to
+    // be redirected to, not just that this endpoint was hit — recorded after
+    // gateway.createCheckoutSession succeeds, not before, so a Stripe-side
+    // failure below doesn't inflate the top-of-funnel count. Paired with
+    // 'checkout_completed' (POST /api/stripe/webhook below) for the
+    // started-vs-completed conversion question this cycle's brief asked for.
+    recordEventInBackground(c, 'checkout_started', '/api/checkout');
     return c.json({ id: session.id, url: session.url });
   } catch (err) {
     console.error('Stripe checkout session creation failed:', err);
@@ -662,6 +702,18 @@ app.post('/api/stripe/webhook', async c => {
           stripeCustomerId: action.stripeCustomerId,
           stripeSubscriptionId: action.stripeSubscriptionId,
         });
+        // The actual "did someone convert" signal, paired with
+        // 'checkout_started' (POST /api/checkout above): recorded right
+        // after the D1 upsert succeeds, i.e. Stripe confirmed the payment
+        // AND it's durably reflected in our own user table — not gated on
+        // the magic-link email or monitor-creation steps below, since those
+        // are secondary to "did this webhook convert a payment into a user
+        // row" and Stripe's at-least-once delivery means this branch can run
+        // more than once for the same conversion (see the idempotency note
+        // further down) without this being a meaningfully double-counted
+        // funnel event in practice — retries are rare and this is a coarse
+        // counter, not a billing-accurate ledger.
+        recordEventInBackground(c, 'checkout_completed', '/api/stripe/webhook');
         const { token } = await createMagicLink(c.env.DB, user.id);
         // The verify link's origin is derived from this very request's URL
         // (same pattern as POST /api/checkout's successUrl/cancelUrl above)
@@ -790,6 +842,59 @@ app.post('/api/stripe/webhook', async c => {
 
 // ── Health / ops ──────────────────────────────────────────────────────────────
 app.get('/health', c => c.json({ ok: true, ts: new Date().toISOString() }));
+
+// ── Admin stats (Cycle #126 analytics) ───────────────────────────────────────
+// Zero-visibility-into-the-funnel fix: one protected read of the COUNT(*)
+// aggregates in src/events.ts, gated by ADMIN_STATS_KEY
+// (`wrangler secret put ADMIN_STATS_KEY`). Same three-state contract as
+// every other secret-gated surface in this file:
+//   - no ADMIN_STATS_KEY configured (or no DB) -> 503, not a crash (same
+//     graceful-degradation convention as WAITLIST/STRIPE_SECRET_KEY/etc.)
+//   - wrong/missing key -> 401
+//   - correct key -> JSON stats
+//
+// The provided and expected keys are compared by hashing both with SHA-256
+// (hashToken, src/auth.ts — the same primitive already used for magic-link/
+// API-key tokens) and then constant-time-comparing the resulting hex
+// digests, rather than a plain `===`: a `===` short-circuits on the first
+// mismatched byte, which leaks the correct prefix length via response
+// timing. Hashing first also means the compared strings are always the same
+// fixed length (64 hex chars), so timingSafeEqualHex's own length
+// short-circuit can't itself leak the real key's length either.
+function timingSafeEqualHex(a: string, b: string): boolean {
+  if (a.length !== b.length) return false;
+  let diff = 0;
+  for (let i = 0; i < a.length; i++) {
+    diff |= a.charCodeAt(i) ^ b.charCodeAt(i);
+  }
+  return diff === 0;
+}
+
+async function verifyAdminStatsKey(provided: string, expected: string): Promise<boolean> {
+  const [providedHash, expectedHash] = await Promise.all([hashToken(provided), hashToken(expected)]);
+  return timingSafeEqualHex(providedHash, expectedHash);
+}
+
+app.get('/admin/stats', async c => {
+  if (!c.env.DB || !c.env.ADMIN_STATS_KEY) {
+    console.log('TODO: DB or ADMIN_STATS_KEY missing — admin stats not available yet');
+    return c.json({ error: 'Not available yet.' }, 503);
+  }
+
+  const authHeader = c.req.header('Authorization');
+  const provided = authHeader?.startsWith('Bearer ') ? authHeader.slice('Bearer '.length).trim() : '';
+  if (!provided || !(await verifyAdminStatsKey(provided, c.env.ADMIN_STATS_KEY))) {
+    return c.json({ error: 'Unauthorized' }, 401);
+  }
+
+  try {
+    const stats = await buildAdminStats(c.env.DB);
+    return c.json(stats);
+  } catch (err) {
+    console.error('Failed to build admin stats:', err);
+    return c.json({ error: 'Could not load stats right now.' }, 500);
+  }
+});
 
 // 404 fallback
 app.notFound(c => c.json({ error: 'Not found' }, 404));

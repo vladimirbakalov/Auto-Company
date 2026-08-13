@@ -26,6 +26,30 @@ function fakeExecutionContext(): ExecutionContext {
   return { waitUntil: () => {}, passThroughOnException: () => {}, props: {} } as unknown as ExecutionContext;
 }
 
+// Cycle #126 analytics tests below need to actually observe the
+// ExecutionContext.waitUntil()-scheduled background event write (unlike
+// fakeExecutionContext() above, which just drops it) — this variant
+// captures every promise handed to waitUntil() so a test can await it before
+// asserting, mirroring how the real Workers runtime keeps the isolate alive
+// until waitUntil()'d work finishes, just synchronously and on-demand for
+// test determinism instead of via the runtime's own scheduling.
+function fakeCapturingExecutionContext(): { ctx: ExecutionContext; settle: () => Promise<void> } {
+  const promises: Promise<unknown>[] = [];
+  const ctx = {
+    waitUntil: (p: Promise<unknown>) => {
+      promises.push(p);
+    },
+    passThroughOnException: () => {},
+    props: {},
+  } as unknown as ExecutionContext;
+  return {
+    ctx,
+    settle: async () => {
+      await Promise.allSettled(promises);
+    },
+  };
+}
+
 const TEST_ENV = {} as Env;
 
 function jsonResponse(body: unknown, status = 200): Response {
@@ -1375,5 +1399,427 @@ describe('POST /api/monitors/:id/mute', () => {
     );
 
     expect(res.status).toBe(401);
+  });
+});
+
+// ── Cycle #126: analytics event instrumentation ─────────────────────────────
+// Covers: events fire at the right trigger points (and NOT at points that
+// don't represent a real funnel step, e.g. a rate-limited or malformed scan
+// request), GET /admin/stats' three-state auth contract, and — the
+// non-negotiable one — an event-recording failure never breaks the real
+// user-facing response it's attached to.
+describe('Analytics — event instrumentation (Cycle #126)', () => {
+  afterEach(() => {
+    vi.restoreAllMocks();
+  });
+
+  // Minimal fake D1 for these tests: records every `events` INSERT it sees
+  // (event_type + path) and, for the admin-stats tests, answers COUNT(*)
+  // queries from a fixed lookup table. Same "branch on the SQL text, not
+  // real query semantics" shortcut as every other hand-rolled D1 fake in
+  // this file (see fakeMonitorsDb/fakeWebhookDb above).
+  function fakeEventsDb(
+    opts: { countsByType?: Record<string, number>; activeMonitors?: number; failInsert?: boolean } = {}
+  ): { db: D1Database; inserted: Array<{ eventType: string; path: string | null }> } {
+    const inserted: Array<{ eventType: string; path: string | null }> = [];
+    const db = {
+      prepare: (sql: string) => ({
+        bind: (...params: unknown[]) => ({
+          run: async () => {
+            if (sql.includes('INSERT INTO events')) {
+              if (opts.failInsert) throw new Error('D1 unavailable');
+              inserted.push({ eventType: params[0] as string, path: (params[1] as string | null) ?? null });
+            }
+            return { success: true } as unknown as D1Result;
+          },
+          first: async <T>() => {
+            if (sql.includes('FROM events')) {
+              const eventType = params[0] as string;
+              return { count: opts.countsByType?.[eventType] ?? 0 } as unknown as T;
+            }
+            return null as unknown as T;
+          },
+        }),
+        // countActiveMonitors (src/events.ts) has no bound params, so it
+        // calls `.first()` directly on the prepare() result — same
+        // zero-param convention as reconcile.ts's fetchKnownStripeCustomerIds.
+        first: async <T>() => {
+          if (sql.includes('FROM monitors')) {
+            return { count: opts.activeMonitors ?? 0 } as unknown as T;
+          }
+          return null as unknown as T;
+        },
+      }),
+    } as unknown as D1Database;
+    return { db, inserted };
+  }
+
+  describe('GET / — landing_pageview', () => {
+    it('records a landing_pageview event for the real request', async () => {
+      const { db, inserted } = fakeEventsDb();
+      const { ctx, settle } = fakeCapturingExecutionContext();
+
+      const res = await app.request('/', {}, { DB: db } as Env, ctx);
+      expect(res.status).toBe(200);
+      await settle();
+
+      expect(inserted).toEqual([{ eventType: 'landing_pageview', path: '/' }]);
+    });
+
+    it('still serves the page normally when DB is missing — no crash, no event', async () => {
+      const { ctx, settle } = fakeCapturingExecutionContext();
+
+      const res = await app.request('/', {}, {} as Env, ctx);
+      expect(res.status).toBe(200);
+      expect(await res.text()).toContain('<html');
+      await settle();
+    });
+
+    it('a failing event write never breaks the real response (and never surfaces as an unhandled rejection)', async () => {
+      const { db } = fakeEventsDb({ failInsert: true });
+      const errorSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
+      const { ctx, settle } = fakeCapturingExecutionContext();
+
+      const res = await app.request('/', {}, { DB: db } as Env, ctx);
+      expect(res.status).toBe(200);
+      const html = await res.text();
+      expect(html).toContain('<html');
+
+      // The background write rejects internally inside recordEvent()'s own
+      // try/catch, which logs and resolves — not something `settle()`
+      // (Promise.allSettled) needs to special-case, and specifically NOT a
+      // rejection that could have propagated anywhere the response depends
+      // on.
+      await settle();
+      expect(errorSpy).toHaveBeenCalledWith('Failed to record analytics event', 'landing_pageview', expect.any(Error));
+    });
+  });
+
+  describe('POST /api/scan — scan_submitted', () => {
+    it('records scan_submitted once the request clears rate-limiting/parsing, even when the scan itself then fails', async () => {
+      const { db, inserted } = fakeEventsDb();
+      const { ctx, settle } = fakeCapturingExecutionContext();
+
+      const res = await app.request(
+        '/api/scan',
+        {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ repoUrl: 'not a valid github repo url' }),
+        },
+        { DB: db } as Env,
+        ctx
+      );
+      expect(res.status).toBe(400); // parseRepoUrl rejects this — the scan attempt itself fails
+      await settle();
+
+      expect(inserted).toEqual([{ eventType: 'scan_submitted', path: '/api/scan' }]);
+    });
+
+    it('does NOT record scan_submitted when the request is rate-limited', async () => {
+      const { db, inserted } = fakeEventsDb();
+      const { ctx, settle } = fakeCapturingExecutionContext();
+      const env = { DB: db, RATE_LIMIT: createFakeKV() } as Env;
+      const ip = 'CF-Connecting-IP-events-1';
+      const scanRequest = () =>
+        app.request(
+          '/api/scan',
+          {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json', 'CF-Connecting-IP': ip },
+            body: JSON.stringify({ repoUrl: 'acme/widgets' }),
+          },
+          env,
+          ctx
+        );
+
+      for (let i = 0; i < SCAN_RATE_LIMIT; i++) await scanRequest();
+      inserted.length = 0; // discard the SCAN_RATE_LIMIT allowed attempts' own events
+
+      const res = await scanRequest();
+      expect(res.status).toBe(429);
+      await settle();
+
+      expect(inserted).toEqual([]);
+    });
+
+    it('does NOT record scan_submitted on malformed JSON', async () => {
+      const { db, inserted } = fakeEventsDb();
+      const { ctx, settle } = fakeCapturingExecutionContext();
+
+      const res = await app.request(
+        '/api/scan',
+        { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: 'not json' },
+        { DB: db } as Env,
+        ctx
+      );
+      expect(res.status).toBe(400);
+      await settle();
+
+      expect(inserted).toEqual([]);
+    });
+  });
+
+  describe('POST /api/checkout — checkout_started', () => {
+    it('records checkout_started once Stripe actually issues a session', async () => {
+      global.fetch = vi.fn(async () =>
+        jsonResponse({ id: 'cs_test_events', url: 'https://checkout.stripe.com/pay/cs_test_events' })
+      ) as unknown as typeof fetch;
+      const { db, inserted } = fakeEventsDb();
+      const { ctx, settle } = fakeCapturingExecutionContext();
+      const env = {
+        DB: db,
+        STRIPE_SECRET_KEY: 'sk_test_fake',
+        STRIPE_WEBHOOK_SECRET: 'whsec_fake',
+        STRIPE_PRICE_ID: 'price_123',
+      } as Env;
+
+      const res = await app.request(
+        '/api/checkout',
+        { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ email: 'a@b.com' }) },
+        env,
+        ctx
+      );
+      expect(res.status).toBe(200);
+      await settle();
+
+      expect(inserted).toEqual([{ eventType: 'checkout_started', path: '/api/checkout' }]);
+    });
+
+    it('does NOT record checkout_started when Stripe secrets are missing (503)', async () => {
+      const { db, inserted } = fakeEventsDb();
+      const { ctx, settle } = fakeCapturingExecutionContext();
+
+      const res = await app.request(
+        '/api/checkout',
+        { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: '{}' },
+        { DB: db } as Env,
+        ctx
+      );
+      expect(res.status).toBe(503);
+      await settle();
+
+      expect(inserted).toEqual([]);
+    });
+
+    it('does NOT record checkout_started when Stripe session creation fails (502)', async () => {
+      global.fetch = vi.fn(async () => new Response('bad request', { status: 400 })) as unknown as typeof fetch;
+      const { db, inserted } = fakeEventsDb();
+      const { ctx, settle } = fakeCapturingExecutionContext();
+      const env = {
+        DB: db,
+        STRIPE_SECRET_KEY: 'sk_test_fake',
+        STRIPE_WEBHOOK_SECRET: 'whsec_fake',
+        STRIPE_PRICE_ID: 'price_123',
+      } as Env;
+
+      const res = await app.request(
+        '/api/checkout',
+        { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: '{}' },
+        env,
+        ctx
+      );
+      expect(res.status).toBe(502);
+      await settle();
+
+      expect(inserted).toEqual([]);
+    });
+  });
+
+  describe('POST /api/stripe/webhook — checkout_completed', () => {
+    const webhookSecret = 'whsec_test_events_secret';
+
+    // Duplicated locally rather than imported/exported — same call as the
+    // existing 'POST /api/stripe/webhook — email wiring' describe block
+    // above (~15 lines, test-only, not worth a shared module for two test
+    // files/blocks).
+    async function signPayload(payload: string, secret: string, timestamp: number): Promise<string> {
+      const signedPayload = `${timestamp}.${payload}`;
+      const key = await crypto.subtle.importKey(
+        'raw',
+        new TextEncoder().encode(secret),
+        { name: 'HMAC', hash: 'SHA-256' },
+        false,
+        ['sign']
+      );
+      const sigBytes = await crypto.subtle.sign('HMAC', key, new TextEncoder().encode(signedPayload));
+      const hex = Array.from(new Uint8Array(sigBytes))
+        .map(b => b.toString(16).padStart(2, '0'))
+        .join('');
+      return `t=${timestamp},v1=${hex}`;
+    }
+
+    async function postWebhook(env: Env, payload: object, ctx: ExecutionContext): Promise<Response> {
+      const body = JSON.stringify(payload);
+      const timestamp = Math.floor(Date.now() / 1000);
+      const signature = await signPayload(body, webhookSecret, timestamp);
+      return app.request(
+        '/api/stripe/webhook',
+        { method: 'POST', headers: { 'Content-Type': 'application/json', 'Stripe-Signature': signature }, body },
+        env,
+        ctx
+      );
+    }
+
+    const checkoutCompletedEvent = {
+      type: 'checkout.session.completed',
+      data: {
+        object: {
+          customer: 'cus_EVT1',
+          customer_email: 'evt@example.com',
+          customer_details: { email: 'evt@example.com' },
+          subscription: 'sub_EVT1',
+        },
+      },
+    };
+
+    // Answers upsertUserFromCheckout's INSERT ... RETURNING *, plus whatever
+    // else the handler touches on the way (createMagicLink's INSERT,
+    // listMonitorsForUser's existence check) with harmless no-op-shaped
+    // responses — this describe block only cares about the `events` INSERT,
+    // not the rest of the webhook's side effects (covered by the existing
+    // 'POST /api/stripe/webhook' describe blocks elsewhere in this file).
+    function fakeDb(): { db: D1Database; inserted: Array<{ eventType: string; path: string | null }> } {
+      const inserted: Array<{ eventType: string; path: string | null }> = [];
+      const db = {
+        prepare: (sql: string) => ({
+          bind: (...params: unknown[]) => ({
+            first: async <T>() => {
+              if (sql.includes('INSERT INTO users')) {
+                return {
+                  id: 77,
+                  email: 'evt@example.com',
+                  stripe_customer_id: 'cus_EVT1',
+                  stripe_subscription_id: 'sub_EVT1',
+                  subscription_status: 'active',
+                  api_key_hash: null,
+                  created_at: '2026-08-13T00:00:00.000Z',
+                } as unknown as T;
+              }
+              return null as unknown as T;
+            },
+            run: async () => {
+              if (sql.includes('INSERT INTO events')) {
+                inserted.push({ eventType: params[0] as string, path: (params[1] as string | null) ?? null });
+              }
+              return { success: true } as unknown as D1Result;
+            },
+            all: async <T>() => ({ results: [] as unknown as T[] }) as unknown as D1Result<T>,
+          }),
+        }),
+      } as unknown as D1Database;
+      return { db, inserted };
+    }
+
+    afterEach(() => {
+      vi.restoreAllMocks();
+    });
+
+    it('records checkout_completed once the D1 upsert succeeds', async () => {
+      vi.spyOn(console, 'log').mockImplementation(() => {}); // silence the "RESEND_API_KEY missing" TODO log
+      const { db, inserted } = fakeDb();
+      const { ctx, settle } = fakeCapturingExecutionContext();
+      const env = { DB: db, STRIPE_SECRET_KEY: 'sk_test_fake', STRIPE_WEBHOOK_SECRET: webhookSecret } as Env;
+
+      const res = await postWebhook(env, checkoutCompletedEvent, ctx);
+      expect(res.status).toBe(200);
+      await settle();
+
+      expect(inserted).toEqual([{ eventType: 'checkout_completed', path: '/api/stripe/webhook' }]);
+    });
+
+    it('does NOT record checkout_completed when the webhook signature is invalid', async () => {
+      const { db, inserted } = fakeDb();
+      const { ctx, settle } = fakeCapturingExecutionContext();
+      const env = { DB: db, STRIPE_SECRET_KEY: 'sk_test_fake', STRIPE_WEBHOOK_SECRET: webhookSecret } as Env;
+
+      const res = await app.request(
+        '/api/stripe/webhook',
+        {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json', 'Stripe-Signature': 't=1,v1=deadbeef' },
+          body: JSON.stringify(checkoutCompletedEvent),
+        },
+        env,
+        ctx
+      );
+      expect(res.status).toBe(400);
+      await settle();
+
+      expect(inserted).toEqual([]);
+    });
+
+    it('does NOT record checkout_completed for an unrelated event type', async () => {
+      vi.spyOn(console, 'log').mockImplementation(() => {});
+      const { db, inserted } = fakeDb();
+      const { ctx, settle } = fakeCapturingExecutionContext();
+      const env = { DB: db, STRIPE_SECRET_KEY: 'sk_test_fake', STRIPE_WEBHOOK_SECRET: webhookSecret } as Env;
+
+      const res = await postWebhook(env, { type: 'invoice.payment_failed', data: { object: { customer: 'cus_EVT1' } } }, ctx);
+      expect(res.status).toBe(200);
+      await settle();
+
+      expect(inserted).toEqual([]);
+    });
+  });
+
+  describe('GET /admin/stats', () => {
+    it('returns 503 when ADMIN_STATS_KEY is not configured', async () => {
+      const { db } = fakeEventsDb();
+      const res = await app.request('/admin/stats', { headers: { Authorization: 'Bearer whatever' } }, { DB: db } as Env);
+      expect(res.status).toBe(503);
+    });
+
+    it('returns 503 when DB is not configured (even with a key set)', async () => {
+      const res = await app.request(
+        '/admin/stats',
+        { headers: { Authorization: 'Bearer secret-key' } },
+        { ADMIN_STATS_KEY: 'secret-key' } as Env
+      );
+      expect(res.status).toBe(503);
+    });
+
+    it('returns 401 when no Authorization header is sent', async () => {
+      const { db } = fakeEventsDb();
+      const res = await app.request('/admin/stats', {}, { DB: db, ADMIN_STATS_KEY: 'secret-key' } as Env);
+      expect(res.status).toBe(401);
+    });
+
+    it('returns 401 when the wrong key is sent', async () => {
+      const { db } = fakeEventsDb();
+      const res = await app.request(
+        '/admin/stats',
+        { headers: { Authorization: 'Bearer totally-wrong-key' } },
+        { DB: db, ADMIN_STATS_KEY: 'secret-key' } as Env
+      );
+      expect(res.status).toBe(401);
+    });
+
+    it('returns 200 with counts when the correct key is sent', async () => {
+      const { db } = fakeEventsDb({
+        countsByType: { landing_pageview: 10, scan_submitted: 4, checkout_started: 2, checkout_completed: 1 },
+        activeMonitors: 3,
+      });
+      const res = await app.request(
+        '/admin/stats',
+        { headers: { Authorization: 'Bearer secret-key' } },
+        { DB: db, ADMIN_STATS_KEY: 'secret-key' } as Env
+      );
+      expect(res.status).toBe(200);
+      const body = (await res.json()) as {
+        landingPageviews: { last24h: number; last7d: number; last30d: number };
+        scansSubmitted: { last24h: number; last7d: number; last30d: number };
+        checkoutStarted: { last24h: number; last7d: number; last30d: number };
+        checkoutCompleted: { last24h: number; last7d: number; last30d: number };
+        activeMonitors: number;
+        generatedAt: string;
+      };
+      expect(body.landingPageviews).toEqual({ last24h: 10, last7d: 10, last30d: 10 });
+      expect(body.scansSubmitted).toEqual({ last24h: 4, last7d: 4, last30d: 4 });
+      expect(body.checkoutStarted).toEqual({ last24h: 2, last7d: 2, last30d: 2 });
+      expect(body.checkoutCompleted).toEqual({ last24h: 1, last7d: 1, last30d: 1 });
+      expect(body.activeMonitors).toBe(3);
+      expect(typeof body.generatedAt).toBe('string');
+    });
   });
 });

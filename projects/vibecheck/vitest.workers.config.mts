@@ -22,7 +22,11 @@ export default defineConfig(async () => {
           // SESSION_SECRET because it's a `wrangler secret` in real
           // deployments (not in wrangler.toml [vars]) and the session-cookie
           // auth path under test needs a real value to sign/verify against.
-          bindings: { TEST_MIGRATIONS: migrations, SESSION_SECRET: 'test-session-secret' },
+          // ADMIN_STATS_KEY (Cycle #126 analytics, `wrangler secret put
+          // ADMIN_STATS_KEY` in real deployments) is here for the same
+          // reason — GET /admin/stats' auth path under test needs a real
+          // value to compare against.
+          bindings: { TEST_MIGRATIONS: migrations, SESSION_SECRET: 'test-session-secret', ADMIN_STATS_KEY: 'test-admin-stats-key' },
         },
       }),
     ],

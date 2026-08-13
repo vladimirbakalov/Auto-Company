@@ -62,6 +62,17 @@ export interface Env {
   // `wrangler secret put RESEND_API_KEY`. Optional: email-sending call sites
   // no-op with a logged TODO when absent, same style as WAITLIST/GITHUB_TOKEN.
   RESEND_API_KEY?: string;
+
+  // Bearer-token secret gating GET /admin/stats (src/events.ts's
+  // buildAdminStats — Cycle #126 top-of-funnel analytics). Set with
+  // `wrangler secret put ADMIN_STATS_KEY`. Optional at the type level so
+  // typecheck/tests don't require it: missing secret (or missing DB) means
+  // the endpoint 503s rather than crashing, same graceful-degradation
+  // convention as every other optional binding in this file. This is a
+  // single shared operator credential, not per-user auth — deliberately
+  // simpler than the users/api_key_hash system above, since this endpoint
+  // has exactly one caller (whoever's checking the numbers), not customers.
+  ADMIN_STATS_KEY?: string;
 }
 
 export interface WaitlistEntry {

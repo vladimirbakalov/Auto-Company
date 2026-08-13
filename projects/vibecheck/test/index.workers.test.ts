@@ -139,3 +139,79 @@ describe('vibecheck routes (real D1 + KV via workerd)', () => {
     await expect(insertMonitor(env.DB!, { userId: 999_999_999, url: 'https://example.com' })).rejects.toThrow();
   });
 });
+
+// Cycle #126 analytics: closes the same "does the real migration/schema
+// actually work, not just the hand-rolled mocks" gap the rest of this file
+// closes for auth/monitors — migrations/0003_events.sql's `events` table,
+// GET / writing to it, and GET /admin/stats reading real COUNT(*)
+// aggregates back out.
+describe('vibecheck analytics (Cycle #126, real D1 via workerd)', () => {
+  it('GET / writes a real landing_pageview row to the events table', async () => {
+    const res = await SELF.fetch('https://vibecheck.test/');
+    expect(res.status).toBe(200);
+
+    const { results } = await env
+      .DB!.prepare("SELECT event_type, path FROM events WHERE event_type = 'landing_pageview'")
+      .all<{ event_type: string; path: string | null }>();
+    expect(results.length).toBeGreaterThanOrEqual(1);
+    expect(results[0]).toEqual({ event_type: 'landing_pageview', path: '/' });
+  });
+
+  it('GET /admin/stats: wrong key -> 401, correct key -> 200 with real events-table counts', async () => {
+    // ADMIN_STATS_KEY IS bound in this test env (vitest.workers.config.mts) —
+    // the "not configured -> 503" state is covered against a mocked env in
+    // test/index.test.ts, since this suite's env always has it bound.
+    const wrongKey = await SELF.fetch('https://vibecheck.test/admin/stats', {
+      headers: { Authorization: 'Bearer not-the-real-key' },
+    });
+    expect(wrongKey.status).toBe(401);
+
+    // Seed a couple of real rows directly, same shape recordEvent() would insert.
+    await env.DB!.prepare("INSERT INTO events (event_type, path) VALUES ('scan_submitted', '/api/scan')").run();
+    await env.DB!.prepare("INSERT INTO events (event_type, path) VALUES ('scan_submitted', '/api/scan')").run();
+
+    const res = await SELF.fetch('https://vibecheck.test/admin/stats', {
+      headers: { Authorization: 'Bearer test-admin-stats-key' },
+    });
+    expect(res.status).toBe(200);
+    const stats = await res.json<{ scansSubmitted: { last24h: number } }>();
+    expect(stats.scansSubmitted.last24h).toBeGreaterThanOrEqual(2);
+  });
+
+  // Regression test for a real bug caught in QA review (Cycle #126): an
+  // earlier version of countEventsInWindow (src/events.ts) computed each
+  // window's cutoff in JS (`new Date(nowMs - ms).toISOString()`) and bound
+  // it directly for a text `occurred_at >= ?` comparison. SQLite's own
+  // `datetime('now')` — what the `occurred_at` column's DEFAULT actually
+  // writes — renders "YYYY-MM-DD HH:MM:SS" (space separator), while
+  // `toISOString()` renders "YYYY-MM-DDTHH:MM:SS.sssZ" ("T"/"Z", millis).
+  // Comparing those two formats as plain text silently drops any event that
+  // shares a calendar date with the cutoff but occurred later in that day,
+  // because "T" (0x54) sorts after the space (0x20) — a same-day event with
+  // a *later* clock time still compares as "less than" the cutoff. This
+  // wasn't a rare edge case: it hits every single day, for however much of
+  // that day falls on the 24h/7d/30d cutoff's calendar date. Fixed by
+  // pushing the cutoff arithmetic into SQLite itself
+  // (`datetime('now', ?)`), so both sides of the comparison are always in
+  // the same format. This test seeds a row landing exactly in the failure
+  // window — same calendar date as the 24h cutoff, 30 minutes after it — to
+  // make sure it stays fixed.
+  it('counts an event 30 minutes inside the 24h window even when it shares a calendar date with the cutoff', async () => {
+    const cutoffMs = Date.now() - 24 * 60 * 60 * 1000;
+    const eventTime = new Date(cutoffMs + 30 * 60 * 1000);
+    const sqliteFormatted = eventTime.toISOString().replace('T', ' ').replace(/\.\d+Z$/, '');
+
+    await env.DB!.prepare(
+      "INSERT INTO events (event_type, path, occurred_at) VALUES ('checkout_started', '/api/checkout', ?1)"
+    )
+      .bind(sqliteFormatted)
+      .run();
+
+    const res = await SELF.fetch('https://vibecheck.test/admin/stats', {
+      headers: { Authorization: 'Bearer test-admin-stats-key' },
+    });
+    expect(res.status).toBe(200);
+    const stats = await res.json<{ checkoutStarted: { last24h: number } }>();
+    expect(stats.checkoutStarted.last24h).toBeGreaterThanOrEqual(1);
+  });
+});

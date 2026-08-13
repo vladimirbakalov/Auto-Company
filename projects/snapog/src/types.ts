@@ -51,4 +51,10 @@ export interface Env {
   STRIPE_WEBHOOK_SECRET?: string;
   STRIPE_PRICE_ID_PRO?: string;
   STRIPE_PRICE_ID_BUSINESS?: string;
+  // Gates GET /admin/stats (src/admin/routes.ts). Same graceful-degrade
+  // pattern as the Stripe secrets above: unset -> the route 503s instead of
+  // crashing. Set via `wrangler secret put ADMIN_STATS_KEY` — this value
+  // itself is the credential (no separate login), so treat it like a
+  // password, not a query-string debug flag.
+  ADMIN_STATS_KEY?: string;
 }

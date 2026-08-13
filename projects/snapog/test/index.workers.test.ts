@@ -113,4 +113,68 @@ describe('snapog routes (real D1 + R2 via workerd)', () => {
     const res = await SELF.fetch(`https://snapog.test/og?title=Hello&key=${rawKey}`);
     expect(res.status).toBe(429);
   });
+
+  // ── Top-of-funnel analytics (migrations/0003_analytics.sql) ──────────────
+  // Real workerd + real D1: confirms the `events` table/index from the new
+  // migration actually apply, and that GET /admin/stats's
+  // `datetime('now', ?)` window queries are valid SQLite (the FakeD1 stand-in
+  // in test/admin.test.ts can't catch a SQL syntax error — only real D1 can).
+  describe('analytics + /admin/stats (real D1)', () => {
+    it('records a landing_pageview row in the real events table on GET /', async () => {
+      const before = await env.DB.prepare(
+        "SELECT COUNT(*) as cnt FROM events WHERE event_type = 'landing_pageview'"
+      ).first<{ cnt: number }>();
+
+      const res = await SELF.fetch('https://snapog.test/');
+      expect(res.status).toBe(200);
+
+      // fire-and-forget waitUntil write — give it a tick to land
+      await env.DB.prepare('SELECT 1').first();
+
+      const after = await env.DB.prepare(
+        "SELECT COUNT(*) as cnt FROM events WHERE event_type = 'landing_pageview'"
+      ).first<{ cnt: number }>();
+      expect(after!.cnt).toBe((before?.cnt ?? 0) + 1);
+    });
+
+    it('records a signup row only once a key is actually created via POST /register', async () => {
+      const before = await env.DB.prepare(
+        "SELECT COUNT(*) as cnt FROM events WHERE event_type = 'signup'"
+      ).first<{ cnt: number }>();
+
+      await registerKey('free');
+      await env.DB.prepare('SELECT 1').first();
+
+      const after = await env.DB.prepare(
+        "SELECT COUNT(*) as cnt FROM events WHERE event_type = 'signup'"
+      ).first<{ cnt: number }>();
+      expect(after!.cnt).toBe((before?.cnt ?? 0) + 1);
+    });
+
+    it('GET /admin/stats returns 503 when ADMIN_STATS_KEY is unset', async () => {
+      const res = await SELF.fetch('https://snapog.test/admin/stats?key=anything');
+      expect(res.status).toBe(503);
+    });
+
+    it('GET /admin/stats 401s on a wrong key and 200s on the right one, with real datetime() window SQL', async () => {
+      env.ADMIN_STATS_KEY = 'real-admin-secret';
+      try {
+        const wrong = await SELF.fetch('https://snapog.test/admin/stats?key=nope');
+        expect(wrong.status).toBe(401);
+
+        await registerKey('free'); // ensure at least one signup/user exists
+
+        const right = await SELF.fetch('https://snapog.test/admin/stats?key=real-admin-secret');
+        expect(right.status).toBe(200);
+        const body = await right.json<{
+          funnel: { last_24h: { signup: number } };
+          totals: { users: number };
+        }>();
+        expect(body.funnel.last_24h.signup).toBeGreaterThanOrEqual(1);
+        expect(body.totals.users).toBeGreaterThanOrEqual(1);
+      } finally {
+        delete (env as { ADMIN_STATS_KEY?: string }).ADMIN_STATS_KEY;
+      }
+    });
+  });
 });
