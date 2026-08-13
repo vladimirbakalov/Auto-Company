@@ -64,6 +64,22 @@ function toHex(bytes: Uint8Array): string {
     .join('');
 }
 
+// Constant-time hex-string compare. The two hex digests here are equal-length
+// HMAC-SHA256 outputs (64 hex chars) by construction, so this never leaks
+// length; a plain `===` short-circuits on the first mismatched byte, which
+// hands a network-observable timing oracle to whoever is calling this
+// webhook endpoint — exactly the class of bug the ADR's crypto section warns
+// about getting right, even though this repo isn't otherwise exposed to
+// that many bytes.
+function timingSafeEqualHex(a: string, b: string): boolean {
+  if (a.length !== b.length) return false;
+  let diff = 0;
+  for (let i = 0; i < a.length; i++) {
+    diff |= a.charCodeAt(i) ^ b.charCodeAt(i);
+  }
+  return diff === 0;
+}
+
 // Pure, exported standalone so it's testable without constructing a full
 // gateway or touching the network — this is the function the ADR's warning
 // is actually about getting right.
@@ -98,7 +114,7 @@ export async function verifyStripeSignature(
   );
   const sigBytes = await crypto.subtle.sign('HMAC', key, new TextEncoder().encode(signedPayload));
   const expected = toHex(new Uint8Array(sigBytes));
-  return expected === v1;
+  return timingSafeEqualHex(expected, v1);
 }
 
 // `secretKey` authenticates API calls (creating Checkout Sessions);

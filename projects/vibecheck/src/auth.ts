@@ -23,6 +23,21 @@ function toHex(bytes: Uint8Array): string {
     .join('');
 }
 
+// Constant-time hex-string compare — see the identical helper (and its
+// rationale) in stripe.ts's verifyStripeSignature. Here it guards the
+// session-cookie HMAC instead of the Stripe webhook HMAC, but it's the same
+// "don't let a plain === short-circuit into a timing oracle" fix, applied to
+// the second (and only other) place in this codebase that checks an
+// attacker-suppliable signature against a computed one.
+function timingSafeEqualHex(a: string, b: string): boolean {
+  if (a.length !== b.length) return false;
+  let diff = 0;
+  for (let i = 0; i < a.length; i++) {
+    diff |= a.charCodeAt(i) ^ b.charCodeAt(i);
+  }
+  return diff === 0;
+}
+
 // Cryptographically random, URL-safe-ish hex token. Used both for magic-link
 // tokens and raw API keys — same shape, different table/prefix at the call
 // site.
@@ -89,7 +104,7 @@ export async function verifySession(value: string, secret: string, nowMs: number
   const key = await hmacKey(secret);
   const expectedSig = await crypto.subtle.sign('HMAC', key, new TextEncoder().encode(body));
   const expectedHex = toHex(new Uint8Array(expectedSig));
-  if (expectedHex !== sigHex) return null;
+  if (!timingSafeEqualHex(expectedHex, sigHex)) return null;
 
   const userId = Number(userIdStr);
   const expiresAtMs = Number(expiresAtMsStr);
