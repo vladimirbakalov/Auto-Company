@@ -1154,6 +1154,118 @@ export const PATTERN_RULES: PatternRule[] = [
       /[\w.-]{0,50}?netlify(?:[ \t\w.-]{0,20})[\s'"]{0,3}(?:=|>|:{1,3}=|\|\||:|=>|\?=|,)[`'"\s=]{0,5}([a-z0-9=_-]{40,46})(?:[`'"\s;]|\\[nr]|$)/gi,
     confidence: "generic",
   },
+  {
+    id: "new-relic-browser-api-token",
+    description: "New Relic Browser API Token (contextual)",
+    // Same keyword-proximity shape. Value has a fixed "NRJS-" prefix plus a
+    // 19-char hex body, gated on "new-relic"/"newrelic"/"new_relic" (flat
+    // alternation) appearing before the assignment. "generic" tier for the
+    // same reason as the rest of this class.
+    build: () =>
+      /[\w.-]{0,50}?(?:new-relic|newrelic|new_relic)(?:[ \t\w.-]{0,20})[\s'"]{0,3}(?:=|>|:{1,3}=|\|\||:|=>|\?=|,)[`'"\s=]{0,5}(NRJS-[a-f0-9]{19})(?:[`'"\s;]|\\[nr]|$)/gi,
+    confidence: "generic",
+  },
+  {
+    id: "new-relic-insert-key",
+    description: "New Relic Insert Key (contextual)",
+    // Same keyword-proximity shape and keyword gate as
+    // new-relic-browser-api-token. Value has a fixed "NRII-" prefix plus a
+    // 32-char alnum/"-" body. "generic" tier for the same reason as the
+    // rest of this class.
+    build: () =>
+      /[\w.-]{0,50}?(?:new-relic|newrelic|new_relic)(?:[ \t\w.-]{0,20})[\s'"]{0,3}(?:=|>|:{1,3}=|\|\||:|=>|\?=|,)[`'"\s=]{0,5}(NRII-[a-z0-9-]{32})(?:[`'"\s;]|\\[nr]|$)/gi,
+    confidence: "generic",
+  },
+  {
+    id: "new-relic-user-api-id",
+    description: "New Relic User API ID (contextual)",
+    // Same keyword-proximity shape and keyword gate as
+    // new-relic-browser-api-token. Value is a bare 64-char lowercase-alnum
+    // value. "generic" tier for the same reason as the rest of this class.
+    build: () =>
+      /[\w.-]{0,50}?(?:new-relic|newrelic|new_relic)(?:[ \t\w.-]{0,20})[\s'"]{0,3}(?:=|>|:{1,3}=|\|\||:|=>|\?=|,)[`'"\s=]{0,5}([a-z0-9]{64})(?:[`'"\s;]|\\[nr]|$)/gi,
+    confidence: "generic",
+  },
+  {
+    id: "new-relic-user-api-key",
+    description: "New Relic User API Key (contextual)",
+    // Same keyword-proximity shape and keyword gate as
+    // new-relic-browser-api-token. Value has a fixed "NRAK-" prefix plus a
+    // 27-char lowercase-alnum body. "generic" tier for the same reason as
+    // the rest of this class.
+    build: () =>
+      /[\w.-]{0,50}?(?:new-relic|newrelic|new_relic)(?:[ \t\w.-]{0,20})[\s'"]{0,3}(?:=|>|:{1,3}=|\|\||:|=>|\?=|,)[`'"\s=]{0,5}(NRAK-[a-z0-9]{27})(?:[`'"\s;]|\\[nr]|$)/gi,
+    confidence: "generic",
+  },
+  {
+    id: "plaid-api-token",
+    description: "Plaid API Token (contextual)",
+    // Same keyword-proximity shape. Value has a fixed "access-" prefix, a
+    // non-capturing "sandbox"/"development"/"production" segment, and a
+    // UUID shape, all inside one capture group, gated on "plaid" appearing
+    // before the assignment. "generic" tier for the same reason as the
+    // rest of this class.
+    build: () =>
+      /[\w.-]{0,50}?plaid(?:[ \t\w.-]{0,20})[\s'"]{0,3}(?:=|>|:{1,3}=|\|\||:|=>|\?=|,)[`'"\s=]{0,5}(access-(?:sandbox|development|production)-[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})(?:[`'"\s;]|\\[nr]|$)/gi,
+    confidence: "generic",
+  },
+  {
+    id: "plaid-client-id",
+    description: "Plaid Client ID (contextual)",
+    // Same keyword-proximity shape and keyword gate as plaid-api-token.
+    // Value is a bare 24-char lowercase-alnum value. "generic" tier for the
+    // same reason as the rest of this class.
+    build: () =>
+      /[\w.-]{0,50}?plaid(?:[ \t\w.-]{0,20})[\s'"]{0,3}(?:=|>|:{1,3}=|\|\||:|=>|\?=|,)[`'"\s=]{0,5}([a-z0-9]{24})(?:[`'"\s;]|\\[nr]|$)/gi,
+    confidence: "generic",
+  },
+  {
+    id: "plaid-secret-key",
+    description: "Plaid Secret Key (contextual)",
+    // Same keyword-proximity shape and keyword gate as plaid-api-token.
+    // Value is a bare 30-char lowercase-alnum value (longer than the client
+    // ID shape, distinguishing the two rules). "generic" tier for the same
+    // reason as the rest of this class.
+    build: () =>
+      /[\w.-]{0,50}?plaid(?:[ \t\w.-]{0,20})[\s'"]{0,3}(?:=|>|:{1,3}=|\|\||:|=>|\?=|,)[`'"\s=]{0,5}([a-z0-9]{30})(?:[`'"\s;]|\\[nr]|$)/gi,
+    confidence: "generic",
+  },
+  {
+    id: "sendbird-access-id",
+    description: "Sendbird Access ID (contextual)",
+    // Same keyword-proximity shape. Value is UUID-shaped (hyphens
+    // preserved in the capture group, same convention as this codebase's
+    // other UUID-shaped rules), gated on "sendbird" appearing before the
+    // assignment. "generic" tier for the same reason as the rest of this
+    // class.
+    build: () =>
+      /[\w.-]{0,50}?sendbird(?:[ \t\w.-]{0,20})[\s'"]{0,3}(?:=|>|:{1,3}=|\|\||:|=>|\?=|,)[`'"\s=]{0,5}([0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})(?:[`'"\s;]|\\[nr]|$)/gi,
+    confidence: "generic",
+  },
+  {
+    id: "sendbird-access-token",
+    description: "Sendbird Access Token (contextual)",
+    // Same keyword-proximity shape and keyword gate as sendbird-access-id.
+    // Value is a bare 40-char hex value. "generic" tier for the same
+    // reason as the rest of this class.
+    build: () =>
+      /[\w.-]{0,50}?sendbird(?:[ \t\w.-]{0,20})[\s'"]{0,3}(?:=|>|:{1,3}=|\|\||:|=>|\?=|,)[`'"\s=]{0,5}([a-f0-9]{40})(?:[`'"\s;]|\\[nr]|$)/gi,
+    confidence: "generic",
+  },
+  {
+    id: "sidekiq-secret",
+    description: "Sidekiq Secret (contextual)",
+    // Same keyword-proximity shape, but the keyword gate is two fixed
+    // Bundler env-var-name strings (flat alternation) instead of a service
+    // name, since Sidekiq Pro/Enterprise credentials are conventionally
+    // supplied via BUNDLE_GEMS__CONTRIBSYS__COM /
+    // BUNDLE_ENTERPRISE__CONTRIBSYS__COM. Value is two 8-char hex segments
+    // separated by a colon, kept inside one capture group. "generic" tier
+    // for the same reason as the rest of this class.
+    build: () =>
+      /[\w.-]{0,50}?(?:BUNDLE_ENTERPRISE__CONTRIBSYS__COM|BUNDLE_GEMS__CONTRIBSYS__COM)(?:[ \t\w.-]{0,20})[\s'"]{0,3}(?:=|>|:{1,3}=|\|\||:|=>|\?=|,)[`'"\s=]{0,5}([a-f0-9]{8}:[a-f0-9]{8})(?:[`'"\s;]|\\[nr]|$)/gi,
+    confidence: "generic",
+  },
 ];
 
 /**

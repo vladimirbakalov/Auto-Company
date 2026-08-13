@@ -1730,6 +1730,188 @@ describe("scanLine — true positives (known-leaked-secret patterns)", () => {
     expect(findings.some((f) => f.ruleId === "netlify-access-token")).toBe(false);
   });
 
+  it("flags a New Relic Browser API Token-shaped value when the keyword 'new-relic' is nearby", () => {
+    const value = "NRJS-" + "ab3fd1".repeat(4).slice(0, 19);
+    const findings = scanLine(line(`const new_relic_browser_token = "${value}";`));
+    expect(findings.some((f) => f.ruleId === "new-relic-browser-api-token" && f.confidence === "generic")).toBe(
+      true,
+    );
+  });
+
+  it("does not flag a value shaped like a New Relic Browser API Token without the keyword nearby", () => {
+    const value = "NRJS-" + "ab3fd1".repeat(4).slice(0, 19);
+    const findings = scanLine(line(`const unrelated_var = "${value}";`));
+    expect(findings.some((f) => f.ruleId === "new-relic-browser-api-token")).toBe(false);
+  });
+
+  it("does not flag a New Relic Browser API Token-shaped value that is one character short even with the keyword nearby", () => {
+    const value = "NRJS-" + "ab3fd1".repeat(4).slice(0, 18);
+    const findings = scanLine(line(`const new_relic_browser_token = "${value}";`));
+    expect(findings.some((f) => f.ruleId === "new-relic-browser-api-token")).toBe(false);
+  });
+
+  it("flags a New Relic Insert Key-shaped value when the keyword 'new-relic' is nearby", () => {
+    const value = "NRII-" + "ab3fd1".repeat(6).slice(0, 32);
+    const findings = scanLine(line(`const new_relic_insert_key = "${value}";`));
+    expect(findings.some((f) => f.ruleId === "new-relic-insert-key" && f.confidence === "generic")).toBe(true);
+  });
+
+  it("does not flag a value shaped like a New Relic Insert Key without the keyword nearby", () => {
+    const value = "NRII-" + "ab3fd1".repeat(6).slice(0, 32);
+    const findings = scanLine(line(`const unrelated_var = "${value}";`));
+    expect(findings.some((f) => f.ruleId === "new-relic-insert-key")).toBe(false);
+  });
+
+  it("does not flag a New Relic Insert Key-shaped value that is one character short even with the keyword nearby", () => {
+    const value = "NRII-" + "ab3fd1".repeat(6).slice(0, 31);
+    const findings = scanLine(line(`const new_relic_insert_key = "${value}";`));
+    expect(findings.some((f) => f.ruleId === "new-relic-insert-key")).toBe(false);
+  });
+
+  it("flags a New Relic User API ID-shaped value when the keyword 'new-relic' is nearby", () => {
+    const value = "aB3fD1x9Qz".repeat(7).slice(0, 64).toLowerCase();
+    const findings = scanLine(line(`const new_relic_user_api_id = "${value}";`));
+    expect(findings.some((f) => f.ruleId === "new-relic-user-api-id" && f.confidence === "generic")).toBe(true);
+  });
+
+  it("does not flag a value shaped like a New Relic User API ID without the keyword nearby", () => {
+    const value = "aB3fD1x9Qz".repeat(7).slice(0, 64).toLowerCase();
+    const findings = scanLine(line(`const unrelated_var = "${value}";`));
+    expect(findings.some((f) => f.ruleId === "new-relic-user-api-id")).toBe(false);
+  });
+
+  it("does not flag a New Relic User API ID-shaped value that is one character short even with the keyword nearby", () => {
+    const value = "aB3fD1x9Qz".repeat(7).slice(0, 63).toLowerCase();
+    const findings = scanLine(line(`const new_relic_user_api_id = "${value}";`));
+    expect(findings.some((f) => f.ruleId === "new-relic-user-api-id")).toBe(false);
+  });
+
+  it("flags a New Relic User API Key-shaped value when the keyword 'new-relic' is nearby", () => {
+    const value = "NRAK-" + "aB3fD1x9Qz".repeat(3).slice(0, 27).toLowerCase();
+    const findings = scanLine(line(`const new_relic_user_api_key = "${value}";`));
+    expect(findings.some((f) => f.ruleId === "new-relic-user-api-key" && f.confidence === "generic")).toBe(true);
+  });
+
+  it("does not flag a value shaped like a New Relic User API Key without the keyword nearby", () => {
+    const value = "NRAK-" + "aB3fD1x9Qz".repeat(3).slice(0, 27).toLowerCase();
+    const findings = scanLine(line(`const unrelated_var = "${value}";`));
+    expect(findings.some((f) => f.ruleId === "new-relic-user-api-key")).toBe(false);
+  });
+
+  it("does not flag a New Relic User API Key-shaped value that is one character short even with the keyword nearby", () => {
+    const value = "NRAK-" + "aB3fD1x9Qz".repeat(3).slice(0, 26).toLowerCase();
+    const findings = scanLine(line(`const new_relic_user_api_key = "${value}";`));
+    expect(findings.some((f) => f.ruleId === "new-relic-user-api-key")).toBe(false);
+  });
+
+  it("flags a Plaid API Token-shaped value when the keyword 'plaid' is nearby", () => {
+    const value = "access-sandbox-12345678-1234-1234-1234-123456789012";
+    const findings = scanLine(line(`const plaid_api_token = "${value}";`));
+    expect(findings.some((f) => f.ruleId === "plaid-api-token" && f.confidence === "generic")).toBe(true);
+  });
+
+  it("does not flag a value shaped like a Plaid API Token without the keyword nearby", () => {
+    const value = "access-sandbox-12345678-1234-1234-1234-123456789012";
+    const findings = scanLine(line(`const unrelated_var = "${value}";`));
+    expect(findings.some((f) => f.ruleId === "plaid-api-token")).toBe(false);
+  });
+
+  it("does not flag a Plaid API Token-shaped value that is one character short even with the keyword nearby", () => {
+    const value = "access-sandbox-12345678-1234-1234-1234-12345678901";
+    const findings = scanLine(line(`const plaid_api_token = "${value}";`));
+    expect(findings.some((f) => f.ruleId === "plaid-api-token")).toBe(false);
+  });
+
+  it("flags a Plaid Client ID-shaped value when the keyword 'plaid' is nearby", () => {
+    const value = "aB3fD1x9Qz".repeat(3).slice(0, 24).toLowerCase();
+    const findings = scanLine(line(`const plaid_client_id = "${value}";`));
+    expect(findings.some((f) => f.ruleId === "plaid-client-id" && f.confidence === "generic")).toBe(true);
+  });
+
+  it("does not flag a value shaped like a Plaid Client ID without the keyword nearby", () => {
+    const value = "aB3fD1x9Qz".repeat(3).slice(0, 24).toLowerCase();
+    const findings = scanLine(line(`const unrelated_var = "${value}";`));
+    expect(findings.some((f) => f.ruleId === "plaid-client-id")).toBe(false);
+  });
+
+  it("does not flag a Plaid Client ID-shaped value that is one character short even with the keyword nearby", () => {
+    const value = "aB3fD1x9Qz".repeat(3).slice(0, 23).toLowerCase();
+    const findings = scanLine(line(`const plaid_client_id = "${value}";`));
+    expect(findings.some((f) => f.ruleId === "plaid-client-id")).toBe(false);
+  });
+
+  it("flags a Plaid Secret Key-shaped value when the keyword 'plaid' is nearby", () => {
+    const value = "aB3fD1x9Qz".repeat(3).slice(0, 30).toLowerCase();
+    const findings = scanLine(line(`const plaid_secret_key = "${value}";`));
+    expect(findings.some((f) => f.ruleId === "plaid-secret-key" && f.confidence === "generic")).toBe(true);
+  });
+
+  it("does not flag a value shaped like a Plaid Secret Key without the keyword nearby", () => {
+    const value = "aB3fD1x9Qz".repeat(3).slice(0, 30).toLowerCase();
+    const findings = scanLine(line(`const unrelated_var = "${value}";`));
+    expect(findings.some((f) => f.ruleId === "plaid-secret-key")).toBe(false);
+  });
+
+  it("does not flag a Plaid Secret Key-shaped value that is one character short even with the keyword nearby", () => {
+    const value = "aB3fD1x9Qz".repeat(3).slice(0, 29).toLowerCase();
+    const findings = scanLine(line(`const plaid_secret_key = "${value}";`));
+    expect(findings.some((f) => f.ruleId === "plaid-secret-key")).toBe(false);
+  });
+
+  it("flags a Sendbird Access ID-shaped value when the keyword 'sendbird' is nearby", () => {
+    const value = "a1b2c3d4-e5f6-a1b2-c3d4-e5f6a1b2c3d4";
+    const findings = scanLine(line(`const sendbird_access_id = "${value}";`));
+    expect(findings.some((f) => f.ruleId === "sendbird-access-id" && f.confidence === "generic")).toBe(true);
+  });
+
+  it("does not flag a value shaped like a Sendbird Access ID without the keyword nearby", () => {
+    const value = "a1b2c3d4-e5f6-a1b2-c3d4-e5f6a1b2c3d4";
+    const findings = scanLine(line(`const unrelated_var = "${value}";`));
+    expect(findings.some((f) => f.ruleId === "sendbird-access-id")).toBe(false);
+  });
+
+  it("does not flag a Sendbird Access ID-shaped value that is one character short even with the keyword nearby", () => {
+    const value = "a1b2c3d4-e5f6-a1b2-c3d4-e5f6a1b2c3d";
+    const findings = scanLine(line(`const sendbird_access_id = "${value}";`));
+    expect(findings.some((f) => f.ruleId === "sendbird-access-id")).toBe(false);
+  });
+
+  it("flags a Sendbird Access Token-shaped value when the keyword 'sendbird' is nearby", () => {
+    const value = "ab3fd1".repeat(7).slice(0, 40);
+    const findings = scanLine(line(`const sendbird_access_token = "${value}";`));
+    expect(findings.some((f) => f.ruleId === "sendbird-access-token" && f.confidence === "generic")).toBe(true);
+  });
+
+  it("does not flag a value shaped like a Sendbird Access Token without the keyword nearby", () => {
+    const value = "ab3fd1".repeat(7).slice(0, 40);
+    const findings = scanLine(line(`const unrelated_var = "${value}";`));
+    expect(findings.some((f) => f.ruleId === "sendbird-access-token")).toBe(false);
+  });
+
+  it("does not flag a Sendbird Access Token-shaped value that is one character short even with the keyword nearby", () => {
+    const value = "ab3fd1".repeat(7).slice(0, 39);
+    const findings = scanLine(line(`const sendbird_access_token = "${value}";`));
+    expect(findings.some((f) => f.ruleId === "sendbird-access-token")).toBe(false);
+  });
+
+  it("flags a Sidekiq Secret-shaped value when the keyword 'BUNDLE_ENTERPRISE__CONTRIBSYS__COM' is nearby", () => {
+    const value = "12345678:87654321";
+    const findings = scanLine(line(`BUNDLE_ENTERPRISE__CONTRIBSYS__COM: "${value}"`));
+    expect(findings.some((f) => f.ruleId === "sidekiq-secret" && f.confidence === "generic")).toBe(true);
+  });
+
+  it("does not flag a value shaped like a Sidekiq Secret without the keyword nearby", () => {
+    const value = "12345678:87654321";
+    const findings = scanLine(line(`const unrelated_var = "${value}";`));
+    expect(findings.some((f) => f.ruleId === "sidekiq-secret")).toBe(false);
+  });
+
+  it("does not flag a Sidekiq Secret-shaped value that is one character short even with the keyword nearby", () => {
+    const value = "1234567:87654321";
+    const findings = scanLine(line(`BUNDLE_ENTERPRISE__CONTRIBSYS__COM: "${value}"`));
+    expect(findings.some((f) => f.ruleId === "sidekiq-secret")).toBe(false);
+  });
+
   it("flags a generic high-entropy value assigned to a secret-like variable name", () => {
     const findings = scanLine(line(`const apiToken = "zT9pQ2xR7mK4vL8nW1sD6fH3jC0bA5eY";`));
     expect(findings.some((f) => f.ruleId === "generic-high-entropy-secret" && f.confidence === "generic")).toBe(
