@@ -136,10 +136,10 @@ const PLACEHOLDER_VALUES = /^(your[-_]?|xxx+|changeme|example|placeholder|<.*>|\
 
 function checkGenericAssignedSecret(line: string): { value: string } | null {
   const m = line.match(
-    /(api[_-]?key|secret[_-]?key|secret|access[_-]?token|token|password)\s*[:=]\s*['"]([^'"]{16,})['"]/i
+    /(api[_-]?key|secret[_-]?key|secret|access[_-]?token|token|password)\s*[:=]\s*([`'"])([^`'"]{16,})\2/i
   );
   if (!m) return null;
-  const value = m[2];
+  const value = m[3];
   if (PLACEHOLDER_VALUES.test(value)) return null;
   if (/^(process\.env|import\.meta\.env|Deno\.env)/.test(value)) return null;
   // Skip if the value itself looks like a reference/interpolation rather than a literal.
@@ -285,13 +285,36 @@ export function checkMissingAuthHeuristic(files: RepoFile[]): Finding[] {
   return findings;
 }
 
-export function runAllChecks(tree: string[], files: RepoFile[]): Finding[] {
+// Each check runs in isolation: if one throws (e.g. an unexpected file shape
+// a future change didn't defensively handle), the scan still returns the
+// other checks' findings instead of failing the whole request with zero
+// results. `failedChecks` lets the caller surface which heuristic(s), if
+// any, couldn't complete — same graceful-degradation pattern index.ts
+// already uses for the optional live-URL probe.
+export function runAllChecks(
+  tree: string[],
+  files: RepoFile[]
+): { findings: Finding[]; failedChecks: string[] } {
   findingCounter = 0; // reset per scan for stable, readable ids
-  return [
-    ...checkExposedEnv(tree, files),
-    ...checkHardcodedSecrets(files),
-    ...checkPermissiveCors(files),
-    ...checkSupabaseRLS(tree, files),
-    ...checkMissingAuthHeuristic(files),
+
+  const checks: { name: string; run: () => Finding[] }[] = [
+    { name: 'exposed .env', run: () => checkExposedEnv(tree, files) },
+    { name: 'hardcoded secrets', run: () => checkHardcodedSecrets(files) },
+    { name: 'permissive CORS', run: () => checkPermissiveCors(files) },
+    { name: 'Supabase RLS', run: () => checkSupabaseRLS(tree, files) },
+    { name: 'missing auth heuristic', run: () => checkMissingAuthHeuristic(files) },
   ];
+
+  const findings: Finding[] = [];
+  const failedChecks: string[] = [];
+  for (const check of checks) {
+    try {
+      findings.push(...check.run());
+    } catch (err) {
+      console.error(`vibecheck: "${check.name}" check failed, skipping:`, err);
+      failedChecks.push(check.name);
+    }
+  }
+
+  return { findings, failedChecks };
 }

@@ -154,6 +154,14 @@ describe('checkHardcodedSecrets', () => {
     expect(findings).toEqual([]);
   });
 
+  it('flags a hardcoded secret assigned via backtick template literal', () => {
+    const findings = checkHardcodedSecrets([
+      file('src/client.ts', 'const apiKey = `abcdefghij1234567890`;'),
+    ]);
+    expect(findings).toHaveLength(1);
+    expect(findings[0].severity).toBe('high');
+  });
+
   it('does not flag values that are environment variable references', () => {
     const findings = checkHardcodedSecrets([
       file('src/client.ts', 'const secretKey = "process.env.SECRET_KEY_LOOKS_LONG";'),
@@ -334,13 +342,30 @@ describe('runAllChecks', () => {
   it('combines findings from every check', () => {
     const tree = ['.env'];
     const files = [file('.gitignore', 'node_modules\n')];
-    const findings = runAllChecks(tree, files);
+    const { findings } = runAllChecks(tree, files);
     expect(findings.some(f => f.title.includes('.env'))).toBe(true);
   });
 
   it('resets finding ids to start fresh on each call', () => {
     const first = runAllChecks(['.env'], []);
     const second = runAllChecks(['.env'], []);
-    expect(first[0].id).toBe(second[0].id);
+    expect(first.findings[0].id).toBe(second.findings[0].id);
+  });
+
+  it('reports no failed checks on well-formed input', () => {
+    const { failedChecks } = runAllChecks(['.env'], [file('.gitignore', 'node_modules\n')]);
+    expect(failedChecks).toEqual([]);
+  });
+
+  it('isolates a throwing check so the others still return findings', () => {
+    // Simulate the exact failure mode the audit called out: a file whose
+    // `content` isn't a string (e.g. an unexpected GitHub API shape), which
+    // makes checkHardcodedSecrets's `file.content.split('\n')` throw.
+    const badFile = { path: 'src/bad.ts', content: undefined } as unknown as RepoFile;
+    const { findings, failedChecks } = runAllChecks(['.env'], [badFile]);
+    expect(failedChecks).toContain('hardcoded secrets');
+    // checkExposedEnv doesn't touch `files` content, so it still runs and
+    // reports the missing .env finding despite the other check throwing.
+    expect(findings.some(f => f.title.includes('.env'))).toBe(true);
   });
 });

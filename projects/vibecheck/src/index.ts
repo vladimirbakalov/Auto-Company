@@ -147,13 +147,16 @@ app.post('/api/scan', async c => {
     const candidates = selectCandidateFiles(tree);
     const files = await fetchFiles(ref, defaultBranch, candidates);
 
-    const findings = runAllChecks(tree, files);
+    const { findings, failedChecks } = runAllChecks(tree, files);
 
     const notes: string[] = [
       'GitHub public API is rate-limited to 60 requests/hour per IP when unauthenticated; scans may occasionally fail during high traffic — retry after a minute.',
     ];
     if (tree.length > files.length + candidates.length) {
       notes.push('Repo tree was larger than this scan\'s sampling budget; only a subset of files were checked.');
+    }
+    for (const name of failedChecks) {
+      notes.push(`The "${name}" check could not complete for this repo and was skipped; other checks still ran normally.`);
     }
 
     // Optional live-URL security check (ADR §3 caller #1, spec §2.2). This is
