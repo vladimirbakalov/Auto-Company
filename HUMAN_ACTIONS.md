@@ -17,6 +17,20 @@
 > now live and green on `pr-summary-action`, `secret-scan-action`, and
 > `secretguard-mcp` (see `docs/devops/` for the workflow content that was
 > used, unchanged from the Cycle #32/#33 drafts).
+>
+> **Cycle #98 update**: the old item #2 ("publish `secretguard-mcp` to the
+> official MCP Registry") is also DONE, same pattern — the "browser login"
+> step was never actually required. `mcp-publisher` supports a
+> `github-oidc` auth method designed to run unattended inside GitHub
+> Actions (`id-token: write` permission, zero secrets). The agent added
+> `.github/workflows/publish-mcp.yml` to the `secretguard-mcp` repo,
+> triggered it via `workflow_dispatch`, and it authenticated and published
+> on the first real attempt (after fixing an unrelated `server.json`
+> description-length validation error — registry caps it at 100 chars, the
+> original was 218). Verified live via a direct registry API query:
+> `io.github.vladimirbakalov/secretguard-mcp` v0.1.4, `status: active`.
+> The workflow also fires automatically on future `v*-mcpb` tags, so no
+> further human/agent action is needed for subsequent releases either.
 
 Consolidated from 19+ autonomous cycles (2026-07-28 → 2026-08-12) of scattered
 notes in `memories/consensus.md`. Every item below is a real blocker the
@@ -58,17 +72,7 @@ post per product/channel, or pick the one you think is most interesting to
 lead with). This is the single fastest path to a first real, non-company
 user.
 
-### 2. Publish `secretguard-mcp` to the official MCP Registry
-```bash
-mcp-publisher login github   # one-time device-flow browser click
-# then, from projects/secretguard-mcp/:
-mcp-publisher publish
-```
-`server.json` is already prepared and points at the correct `.mcpb` release
-asset. `mcp-publisher` is now installed (`brew install mcp-publisher`, done
-Cycle #26) — `login` is the only step left, browser click only.
-
-### 3. List `pr-summary-action` on GitHub Marketplace
+### 2. List `pr-summary-action` on GitHub Marketplace
 **Update, Cycle #71**: `secret-scan-action` is confirmed **already live** at
 `github.com/marketplace/actions/secret-scan-action` — that half of this item
 is done (verified via a fresh `curl` of the Marketplace search results this
@@ -90,7 +94,7 @@ Repo: `github.com/vladimirbakalov/pr-summary-action`.
 
 ## Bigger unlock — the actual revenue blocker
 
-### 4. Cloudflare deploy (vibecheck + snapog)
+### 3. Cloudflare deploy (vibecheck + snapog)
 Both products are scope-complete, tested, and deploy-ready. This has been the
 top blocker for 19+ cycles. Full steps:
 `docs/devops/snapog-deploy-runbook.md` (vibecheck's runbook is equivalent —
@@ -101,22 +105,28 @@ wrangler login   # wrangler is now installed (npm install -g wrangler, done
                  # Cycle #26) — login is the only step left, browser click only
 ```
 
-### 5. Resend (for vibecheck/snapog transactional email)
+### 4. Resend (for vibecheck/snapog transactional email)
 Sign up at resend.com, verify a sending domain, then:
 ```bash
 wrangler secret put RESEND_API_KEY
 ```
-Depends on #4 being done first (need `wrangler` + a deployed Worker to attach
+Depends on #3 being done first (need `wrangler` + a deployed Worker to attach
 the secret to).
 
 ## Optional, low priority
 
-### 6. `npm adduser` / `npm login`
+### 5. `npm adduser` / `npm login`
 Would let the agent `npm publish secretguard-mcp` directly instead of relying
 on `npx github:...`. Not required — the GitHub-based install already works
 end-to-end (verified Cycle #24 with a real `npx -y github:...` handshake).
+**Cycle #98 note**: npm does support OIDC "Trusted Publishing" from GitHub
+Actions (no login step, same shape as the MCP Registry fix above) — not
+verified working end-to-end yet, since this item isn't blocking anything
+today. Worth a real attempt in a future cycle if npm publishing ever
+becomes load-bearing, using the same "actually try it before assuming it
+needs a human" approach that resolved items #2 and #4→SSH.
 
-### 7. Delete a harmless throwaway repo
+### 6. Delete a harmless throwaway repo
 Cycle #97's end-to-end QA smoke test created
 `github.com/vladimirbakalov/secret-scan-action-smoketest-c97` to verify the
 real PR-comment flow. The agent's token lacks the `delete_repo` scope, so

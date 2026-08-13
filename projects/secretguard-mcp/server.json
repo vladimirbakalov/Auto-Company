@@ -1,7 +1,7 @@
 {
   "$schema": "https://static.modelcontextprotocol.io/schemas/2025-12-11/server.schema.json",
   "name": "io.github.vladimirbakalov/secretguard-mcp",
-  "description": "Scans code for hardcoded secrets (AWS/Stripe/GitHub/Google/Slack keys, private keys, JWTs, high-entropy credentials) before an AI coding agent writes or commits it. Zero-config, no API key, runs locally over stdio.",
+  "description": "Scans code for hardcoded secrets (AWS, Stripe, GitHub, JWTs) before an AI agent commits it.",
   "repository": {
     "url": "https://github.com/vladimirbakalov/secretguard-mcp",
     "source": "github"
