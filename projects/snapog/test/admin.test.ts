@@ -184,6 +184,29 @@ describe('GET /admin/stats', () => {
     expect(typeof body.generated_at).toBe('string');
   });
 
+  it('ignores events of an unrecognized type instead of crashing or leaking them into funnel counts', async () => {
+    // src/admin/routes.ts's countEventsByType() only assigns a row into the
+    // result if its event_type is in the known EVENT_TYPES list — forward
+    // compatibility with a schema/event type added before this route is
+    // updated to know about it. No prior fixture ever included one, so that
+    // filter had zero coverage.
+    db.events = [
+      { id: '1', event_type: 'landing_pageview', path: '/' },
+      { id: '2', event_type: 'some_future_event', path: null },
+    ];
+
+    const env = baseEnv(db, 'super-secret');
+    const res = await app.request('/admin/stats?key=super-secret', {}, env);
+    expect(res.status).toBe(200);
+    const body = await res.json();
+    expect(body.funnel.last_24h).toMatchObject({
+      landing_pageview: 1,
+      register_pageview: 0,
+      signup: 0,
+    });
+    expect(body.funnel.last_24h).not.toHaveProperty('some_future_event');
+  });
+
   it('returns zeroed counts (not an error) when there is no data yet', async () => {
     const env = baseEnv(db, 'super-secret');
     const res = await app.request('/admin/stats?key=super-secret', {}, env);

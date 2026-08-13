@@ -487,6 +487,43 @@ describe('POST /billing/checkout', () => {
     );
     expect(res.status).toBe(400);
   });
+
+  it('rejects a request with no key at all', async () => {
+    const db = new FakeD1();
+    const env = baseEnv(db);
+    const res = await app.request(
+      '/billing/checkout',
+      { method: 'POST', body: new URLSearchParams({ tier: 'pro' }) },
+      env
+    );
+    expect(res.status).toBe(400);
+  });
+
+  it('returns 503 when the requested tier has no configured Stripe price yet', async () => {
+    // STRIPE_PRICE_ID_PRO/BUSINESS unset — distinct 503 from the "Stripe not
+    // configured at all" case above (STRIPE_SECRET_KEY is set here).
+    const db = new FakeD1();
+    const env = { DB: db as unknown as Env['DB'], ENVIRONMENT: 'test', STRIPE_SECRET_KEY: 'sk_test_fake' } as Env;
+    const res = await app.request(
+      '/billing/checkout',
+      { method: 'POST', body: new URLSearchParams({ key: 'sk_whatever', tier: 'pro' }) },
+      env
+    );
+    expect(res.status).toBe(503);
+    const body = await res.json();
+    expect(body.error).toContain('pro');
+  });
+
+  it('rejects an API key that does not resolve to any user', async () => {
+    const db = new FakeD1();
+    const env = baseEnv(db);
+    const res = await app.request(
+      '/billing/checkout',
+      { method: 'POST', body: new URLSearchParams({ key: 'sk_does_not_exist', tier: 'pro' }) },
+      env
+    );
+    expect(res.status).toBe(401);
+  });
 });
 
 describe('GET /billing/portal', () => {
