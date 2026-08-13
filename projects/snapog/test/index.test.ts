@@ -557,5 +557,54 @@ describe('snapog routes', () => {
       expect(res.status).toBe(200);
       expect(res.headers.get('content-type')).toContain('text/html');
     });
+
+    it('shows the upgrade CTA but no billing-portal link for a free-tier key', async () => {
+      const rawKey = await registerKey('free');
+      const res = await app.request(`/dashboard?key=${rawKey}`, {}, env);
+      const html = await res.text();
+      expect(html).toContain('Upgrade to Pro');
+      expect(html).not.toContain('/billing/portal');
+    });
+
+    it('shows the billing-portal link but no upgrade CTA for a paid-tier key', async () => {
+      // Paid tiers only ever come from a Stripe webhook (see the "always
+      // creates a free-tier key" test above) — simulate that state by
+      // mutating the stored row directly, same pattern used for the
+      // watermark/quota tests above.
+      const rawKey = await registerKey('free');
+      const hash = await sha256(rawKey);
+      const key = [...db.apiKeys.values()].find(k => k.key_hash === hash)!;
+      key.tier = 'pro';
+
+      const res = await app.request(`/dashboard?key=${rawKey}`, {}, env);
+      const html = await res.text();
+      expect(html).toContain('Manage billing');
+      expect(html).toContain('/billing/portal?key=');
+      expect(html).not.toContain('Upgrade to Pro');
+    });
+
+    it('flags the usage bar as "full" once the monthly limit is reached', async () => {
+      const rawKey = await registerKey('free');
+      const hash = await sha256(rawKey);
+      const key = [...db.apiKeys.values()].find(k => k.key_hash === hash)!;
+      key.usage_count = key.monthly_limit;
+
+      const res = await app.request(`/dashboard?key=${rawKey}`, {}, env);
+      const html = await res.text();
+      expect(html).toContain('usage-bar full');
+      expect(html).toContain('100% used');
+    });
+
+    it('flags the usage bar as "warn" past 80% but not yet full', async () => {
+      const rawKey = await registerKey('free');
+      const hash = await sha256(rawKey);
+      const key = [...db.apiKeys.values()].find(k => k.key_hash === hash)!;
+      key.usage_count = Math.round(key.monthly_limit * 0.85);
+
+      const res = await app.request(`/dashboard?key=${rawKey}`, {}, env);
+      const html = await res.text();
+      expect(html).toContain('usage-bar warn');
+      expect(html).not.toContain('usage-bar full');
+    });
   });
 });
