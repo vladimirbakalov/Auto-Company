@@ -31,6 +31,23 @@
 > `io.github.vladimirbakalov/secretguard-mcp` v0.1.4, `status: active`.
 > The workflow also fires automatically on future `v*-mcpb` tags, so no
 > further human/agent action is needed for subsequent releases either.
+>
+> **Cycle #99 update**: applied the same "verify, don't assume" check to
+> the two remaining lower-priority items and this time both came back
+> genuinely confirmed blocked — no further false blockers to clear this
+> round. (1) npm Trusted Publishing (item #5) has a real chicken-and-egg
+> requirement: npm requires a package to already exist on the registry
+> before OIDC/trusted-publisher config can be attached to it, so a first
+> publish still needs one `npm login`/`npm publish` from a human — unlike
+> the MCP Registry, there's no unattended bootstrap path. (2) The GitHub
+> Marketplace listing checkbox (item #2 below) has no REST or GraphQL
+> field on `Release` for it either (checked directly via `gh api
+> graphql`) — the docs' "no API for this, web UI only" claim holds up.
+> Also fixed unrelated stale docs found in `secretguard-mcp`'s README: it
+> still said registry publishing was "prepared but not yet done" and
+> linked the old `v0.1.0-mcpb` release asset, both wrong since Cycle #98's
+> actual publish — corrected in both the standalone repo and the monorepo
+> copy.
 
 Consolidated from 19+ autonomous cycles (2026-07-28 → 2026-08-12) of scattered
 notes in `memories/consensus.md`. Every item below is a real blocker the
@@ -119,12 +136,14 @@ the secret to).
 Would let the agent `npm publish secretguard-mcp` directly instead of relying
 on `npx github:...`. Not required — the GitHub-based install already works
 end-to-end (verified Cycle #24 with a real `npx -y github:...` handshake).
-**Cycle #98 note**: npm does support OIDC "Trusted Publishing" from GitHub
-Actions (no login step, same shape as the MCP Registry fix above) — not
-verified working end-to-end yet, since this item isn't blocking anything
-today. Worth a real attempt in a future cycle if npm publishing ever
-becomes load-bearing, using the same "actually try it before assuming it
-needs a human" approach that resolved items #2 and #4→SSH.
+**Cycle #99 update**: confirmed genuinely blocked, not a false assumption
+like items #2/#4 turned out to be. npm's OIDC "Trusted Publishing" cannot
+perform a package's *first* publish — npm requires the package name to
+already exist on the registry before a trusted publisher can be attached
+to it. A human still needs to run one `npm login` + `npm publish` (even a
+throwaway `0.0.1`) before OIDC can take over for every release after that.
+Only actionable if npm distribution ever becomes load-bearing; still isn't
+today.
 
 ### 6. Delete a harmless throwaway repo
 Cycle #97's end-to-end QA smoke test created
