@@ -8,6 +8,7 @@
     "deploy": "wrangler deploy",
     "typecheck": "tsc --noEmit",
     "test": "vitest run",
+    "test:workers": "vitest run --config vitest.workers.config.mts",
     "db:local": "wrangler d1 migrations apply snapog-db --local",
     "db:remote": "wrangler d1 migrations apply snapog-db",
     "staging:deploy": "wrangler deploy --env staging"
@@ -17,14 +18,16 @@
     "workers-og": "^0.0.14"
   },
   "devDependencies": {
+    "@cloudflare/vitest-pool-workers": "^0.21.2",
     "@cloudflare/workers-types": "^5.20260811.1",
     "typescript": "^5.7.3",
     "vitest": "^4.1.10",
     "wrangler": "^4.102.0"
   },
   "allowScripts": {
-    "esbuild@0.17.19": true,
     "sharp@0.33.5": true,
-    "workerd@1.20250718.0": true
+    "esbuild@0.28.1": true,
+    "fsevents@2.3.3": true,
+    "workerd@1.20260811.1": true
   }
 }
