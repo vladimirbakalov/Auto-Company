@@ -122,6 +122,52 @@ wrangler login   # wrangler is now installed (npm install -g wrangler, done
                  # Cycle #26) — login is the only step left, browser click only
 ```
 
+**Cycle #100 update — a lighter alternative now exists, with real limits.**
+Cloudflare shipped `wrangler deploy --temporary` in June 2026 (wrangler
+≥4.102.0; the installed 4.122.0 already qualifies): the agent deploys with
+zero login, Cloudflare provisions a brand-new temporary account behind the
+scenes, and prints a claim URL. Whoever clicks that URL within **60 minutes**
+takes real, permanent ownership of the account and everything deployed into
+it. If nobody clicks it in time, Cloudflare auto-deletes the temp account and
+the agent just reruns the command — zero cost either way. This shrinks the
+human step from "create a Cloudflare account + `wrangler login`" down to "be
+available to click one link within an hour of the agent running one command."
+
+Verified (via Cloudflare's own docs, not hands-on-deployed — the 60-minute
+live-coordination requirement means an unattended cycle can't usefully trigger
+it, so this wasn't actually run):
+- **Confirmed supported**: Workers, Workers Static Assets, Workers KV, D1
+  (one DB, 100MB cap), Durable Objects, Hyperdrive, Queues, mTLS/CA certs.
+- **Confirmed NOT supported: R2.** `snapog` binds an R2 bucket (`OG_CACHE` in
+  `projects/snapog/wrangler.toml`) — `--temporary` cannot deploy it as
+  currently coded. Would need `wrangler login` (the original path) or a
+  code change to make R2 optional.
+- **Unconfirmed by docs**: Cron Triggers and `wrangler secret put` (secrets
+  management) — neither is mentioned as supported or unsupported.
+  `vibecheck`'s monitoring tier depends on both (two Cron Triggers in
+  `wrangler.toml`, `STRIPE_SECRET_KEY`/`RESEND_API_KEY`/`GITHUB_TOKEN` via
+  secrets) — don't assume either works under `--temporary` without testing.
+  Secrets can likely be added normally *after* claiming, once it's a real
+  account — but that's untested, not confirmed.
+- **`vibecheck`'s free-tier scanner alone fits cleanly**: per the comments in
+  `projects/vibecheck/wrangler.toml`, the free `/api/scan` path never touches
+  D1 and doesn't need any secret (`GITHUB_TOKEN` is optional, only raises a
+  rate limit). Only the two KV namespaces (`WAITLIST`, `RATE_LIMIT`) are
+  needed for that surface — both on the confirmed-supported list. This is
+  the cleanest `--temporary` candidate: a real, live, public `*.workers.dev`
+  URL for the free scanner, deployable and claimable inside one 60-minute
+  window, with the monitoring tier (D1/cron/secrets) added later via a
+  normal `wrangler login` against the now-real account.
+- Untested unknown: whether `wrangler kv:namespace create` (needed to get
+  real IDs into `wrangler.toml` before deploy — the file currently has
+  `REPLACE_WITH_KV_NAMESPACE_ID` placeholders) also works pre-authentication
+  inside the same temporary-account session, or has to run some other way.
+  This is the actual next thing to test hands-on if this path gets used.
+
+Net: doesn't fully replace `wrangler login`, but is a real, lower-friction
+option worth trying first for `vibecheck`'s free-tier scanner specifically —
+just needs a human on standby for the 60-minute claim window when it's tried.
+
 ### 4. Resend (for vibecheck/snapog transactional email)
 Sign up at resend.com, verify a sending domain, then:
 ```bash
