@@ -1,5 +1,22 @@
 # Human Actions Needed
 
+> **URGENT — Cycle #102 (2026-08-13): vibecheck's free-tier scanner is
+> LIVE right now at `https://vibecheck.fourth-game.workers.dev`, deployed
+> live via `wrangler deploy --temporary` and hands-on verified end-to-end
+> (a real POST /api/scan against a real GitHub repo returned a real
+> score/grade/findings response). It is running on a **temporary Cloudflare
+> account that self-destructs unless claimed within 60 minutes of the
+> deploy** (deploy ran ~11:49 UTC this cycle). Claim URL:
+> `https://dash.cloudflare.com/claim-preview?claimToken=1pcMc9Z1-WEonXUijQZomJNrt11IB9KB29KaobZED7g`.
+> If you're reading this after the window closed, the account and its
+> resources are already gone — that's fine, it's free to retry, just tell
+> the agent "try the Cloudflare temporary claim again" and be ready to
+> click within the hour. See item #3 below for full detail, including one
+> real limitation discovered this run: cron triggers (needed for
+> vibecheck's paid monitoring tier) failed to attach because Workers Free
+> caps temp accounts at 0 cron triggers — the free scanner itself doesn't
+> need them and is unaffected.
+>
 > **Status as of Cycle #97 (2026-08-13): three products are LIVE, tested,
 > and 0 real users have reached any of them.** Every remaining growth lever
 > — items #1-#4 below — is a single click or copy-paste, blocked only on
@@ -210,6 +227,57 @@ code inspection (still not hands-on tested):**
    structure, not confirmed end-to-end against Cloudflare's live API —
    still the first thing to watch when this path is actually run with a
    human on standby.
+
+**Cycle #102 update — actually ran it live, end-to-end, for the first
+time. Result: vibecheck's free scanner is really deployed and working,
+pending your claim within the window. Three corrections to what Cycle
+#101 predicted from source alone:**
+
+1. **The Cycle #101 prediction was half-right, half-wrong.**
+   `wrangler kv:namespace create` does *not* automatically pick up a
+   cached temp account from a prior `wrangler deploy --temporary` run —
+   `--temporary` must be passed explicitly to every command in the
+   session (`kv namespace create WAITLIST --temporary`, `d1 create
+   vibecheck-db --temporary`, etc.). When passed, it does correctly
+   reuse the *same* account and claim URL each time (wrangler prints
+   `Account: <name> (reused)` instead of `(created)`), so it's still a
+   single 60-minute window covering deploy + all resource creation, just
+   not automatic — each command needs the flag.
+2. **`wrangler d1 migrations apply --remote --temporary` is broken** —
+   it throws `"You're already authenticated with Cloudflare, so
+   --temporary can't be used"` (a real wrangler bug: this command's auth
+   check reads the cached temp-account credential file and misreads it
+   as a real login, then rejects `--temporary` as contradictory; other
+   commands like `kv namespace create` and `deploy` don't have this
+   bug). Workaround that worked: read `account.id` and `apiToken`
+   straight out of `~/Library/Preferences/.wrangler/wrangler-temporary-
+   account.toml` (created after the first `deploy --temporary`), export
+   them as `CLOUDFLARE_ACCOUNT_ID` / `CLOUDFLARE_API_TOKEN`, then run
+   `wrangler d1 migrations apply vibecheck-db --remote` with no
+   `--temporary` flag at all — migrations applied cleanly against the
+   real remote D1 instance.
+3. **Cron Triggers are confirmed NOT supported** — not just
+   "unconfirmed by docs" as Cycle #100/#101 had it. The real error:
+   Workers Free plan (which is what temp accounts run on) caps cron
+   triggers at 0 per account (`code: 10072`). Deploy still succeeds for
+   everything else — the Worker, KV, D1 all went live — wrangler just
+   reports the trigger step as a partial failure. vibecheck's free-tier
+   scanner doesn't use crons at all, so this doesn't block it; the paid
+   monitoring tier's two crons will need a claimed + Workers-Paid-
+   upgraded account before they can attach (`wrangler deploy` again,
+   post-claim, post-upgrade — no `--temporary` needed at that point).
+
+**What's actually live right now** (as of this deploy, pending your
+claim): `https://vibecheck.fourth-game.workers.dev` — homepage returns
+200, and `POST /api/scan` with a real GitHub repo URL returned a real
+score/grade/findings JSON response (tested against
+`cloudflare/workers-sdk`, scored 93/A). Real resource ids (WAITLIST,
+RATE_LIMIT KV namespaces, vibecheck-db D1 with both migrations applied)
+are committed into `projects/vibecheck/wrangler.toml` — see commit
+`bf2e567`. **If the claim window closes before you click it, these ids
+become orphaned/invalid** and the next attempt will need fresh ones
+(cheap to redo, just tell the agent to try again and be ready to click
+within the hour).
 
 ### 4. Resend (for vibecheck/snapog transactional email)
 Sign up at resend.com, verify a sending domain, then:
