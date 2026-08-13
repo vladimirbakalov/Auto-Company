@@ -776,6 +776,24 @@ describe("scanLine — true positives (known-leaked-secret patterns)", () => {
     expect(findings.some((f) => f.ruleId === "contentful-delivery-api-token")).toBe(false);
   });
 
+  it("flags an Intercom-shaped value when the keyword 'intercom' is nearby", () => {
+    const value = "aB3fD1x9Qz".repeat(6).slice(0, 60).toLowerCase();
+    const findings = scanLine(line(`const intercom_token = "${value}";`));
+    expect(findings.some((f) => f.ruleId === "intercom-api-key" && f.confidence === "generic")).toBe(true);
+  });
+
+  it("does not flag a 60-char value shaped like an Intercom token without the keyword nearby", () => {
+    const value = "aB3fD1x9Qz".repeat(6).slice(0, 60).toLowerCase();
+    const findings = scanLine(line(`const unrelated_var = "${value}";`));
+    expect(findings.some((f) => f.ruleId === "intercom-api-key")).toBe(false);
+  });
+
+  it("does not flag an Intercom-shaped value that is one character short even with the keyword nearby", () => {
+    const value = "aB3fD1x9Qz".repeat(6).slice(0, 59).toLowerCase();
+    const findings = scanLine(line(`const intercom_token = "${value}";`));
+    expect(findings.some((f) => f.ruleId === "intercom-api-key")).toBe(false);
+  });
+
   it("flags a HubSpot-shaped value when the keyword 'hubspot' is nearby", () => {
     const value = "12345678-9abc-def0-1234-56789abcdef0";
     const findings = scanLine(line(`const hubspot_key = "${value}";`));

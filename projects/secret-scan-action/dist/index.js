@@ -33399,6 +33399,16 @@ exports.PATTERN_RULES = [
         confidence: "generic",
     },
     {
+        id: "intercom-api-key",
+        description: "Intercom API Token (contextual)",
+        // Same keyword-proximity shape. Value is a bare 60-char
+        // alnum-with-`=`/`_`/`-` string, gated on "intercom" appearing before
+        // the assignment. "generic" tier for the same reason as the rest of
+        // this class.
+        build: () => /[\w.-]{0,50}?intercom(?:[ \t\w.-]{0,20})[\s'"]{0,3}(?:=|>|:{1,3}=|\|\||:|=>|\?=|,)[`'"\s=]{0,5}([a-z0-9=_-]{60})(?:[`'"\s;]|\\[nr]|$)/gi,
+        confidence: "generic",
+    },
+    {
         id: "hubspot-api-key",
         description: "HubSpot API Key (contextual)",
         // Same keyword-proximity shape, but a UUID-shaped value (HubSpot's own
