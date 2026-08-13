@@ -1127,7 +1127,7 @@ describe('GET /dashboard', () => {
     muted_until: null,
   };
 
-  function fakeDashboardDb(opts: { user: UserRow; monitor: MonitorRow | null; alerts: AlertRow[] }): D1Database {
+  function fakeDashboardDb(opts: { user: UserRow; monitor: MonitorRow | null; alerts: AlertRow[]; checks?: CheckRow[] }): D1Database {
     return {
       prepare: (sql: string) => ({
         bind: () => ({
@@ -1140,7 +1140,7 @@ describe('GET /dashboard', () => {
               return { results: opts.monitor ? [opts.monitor] : [] } as unknown as { results: T[] };
             }
             if (sql.startsWith('SELECT * FROM checks')) {
-              return { results: [] as CheckRow[] } as unknown as { results: T[] };
+              return { results: (opts.checks ?? []) as CheckRow[] } as unknown as { results: T[] };
             }
             if (sql.startsWith('SELECT * FROM alerts')) {
               return { results: opts.alerts } as unknown as { results: T[] };
@@ -1238,6 +1238,33 @@ describe('GET /dashboard', () => {
     expect(html).toContain('Ongoing');
     expect(html).toContain('Resolved');
     expect(html).toContain('Back up');
+  });
+
+  // renderSparkline (pages.ts) draws an <svg> polyline only when given >=2
+  // non-null latency points; every test above passes checks: [] (the
+  // default), so only the "still gathering data" placeholder was ever
+  // exercised. fetchTrailingChecks' real rows have distinct latency_ms
+  // values, so assert the polyline path renders instead of the placeholder.
+  it('renders the sparkline SVG when trailing checks have latency data', async () => {
+    const checks: CheckRow[] = [
+      { id: 1, monitor_id: 5, checked_at: '2026-08-12T00:00:00.000Z', status_code: 200, latency_ms: 120, ok: 1, error: null },
+      { id: 2, monitor_id: 5, checked_at: '2026-08-12T00:05:00.000Z', status_code: 200, latency_ms: 340, ok: 1, error: null },
+      { id: 3, monitor_id: 5, checked_at: '2026-08-12T00:10:00.000Z', status_code: 200, latency_ms: 200, ok: 1, error: null },
+    ];
+    const env = {
+      DB: fakeDashboardDb({ user: dashboardUser, monitor: dashboardMonitor, alerts: [], checks }),
+    } as Env;
+
+    const res = await app.request(
+      '/dashboard',
+      { headers: { Authorization: 'Bearer fake-api-key' } },
+      env
+    );
+
+    expect(res.status).toBe(200);
+    const html = await res.text();
+    expect(html).toContain('<svg class="sparkline"');
+    expect(html).not.toContain('Still gathering response-time data');
   });
 
   // Route-level coverage for the security-drift live-probe branch (qa-bach
