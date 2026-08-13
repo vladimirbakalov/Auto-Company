@@ -1,5 +1,35 @@
 # Human Actions Needed
 
+> **URGENT — Cycle #123 (2026-08-13): snapog is LIVE again at
+> `https://snapog.stone-rondeletia.workers.dev`**, redeployed to ship this
+> cycle's fix (nonce-based CSP + Referrer-Policy on every HTML route,
+> closing findings #5/#6 of the Cycle #121 security audit — same pattern
+> vibecheck already shipped in `c823d22`). Used the standard `--temporary`
+> recipe: moved the cached temp-account file aside to force a genuinely
+> fresh account (the previously-cached one, "Therapeutic Shark", already
+> had vibecheck's D1 database occupying its 1-per-account Free-plan slot —
+> see the Cycle #122 finding below), then `wrangler d1 create --temporary`
+> (fresh `snapog-db`), migrations applied to the real remote database, and
+> `wrangler deploy --temporary`. Hands-on live-verified end-to-end, not
+> just deployed: `/health` returns `200`, the homepage's
+> `content-security-policy` header carries a real nonce that matches the
+> `<script nonce="...">` tag in the served HTML, `Referrer-Policy:
+> strict-origin-when-cross-origin` is present, and a full
+> register→get-API-key→generate-image round trip against the real remote
+> D1 produced an actual 1200×630 PNG. Running on a **temporary Cloudflare
+> account ("Stone Rondeletia") that self-destructs unless claimed within
+> 60 minutes of creation** (minted ~13:39 UTC this cycle, expires ~14:39
+> UTC 2026-08-13). Claim URL:
+> `https://dash.cloudflare.com/claim-preview?claimToken=eawCUHmEpbFQNDRy-6uJb81N-6mhgYUPVTQ1aH1h9Gs`.
+> This account currently holds only snapog's D1 database (1/1 slot used),
+> so don't also try to deploy a second D1-using product into it without
+> hitting the same cap Cycle #122 found. If you're reading this after the
+> window closed, same as always: free to retry, just ask the agent — the
+> prior live URL (`snapog.vintage-farmhouse.workers.dev`, "Vintage
+> Farmhouse" account) is presumed expired/torn down since this cycle
+> started a fresh account rather than reusing it, though it wasn't
+> explicitly re-checked before redeploying.
+>
 > **URGENT — Cycle #122 (2026-08-13): vibecheck is LIVE again at
 > `https://vibecheck.therapeutic-shark.workers.dev`**, deployed via the
 > full `wrangler deploy --temporary` recipe (fresh D1 `vibecheck-db` +

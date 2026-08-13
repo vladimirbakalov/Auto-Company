@@ -20,7 +20,7 @@ compatibility_flags = ["nodejs_compat"]
 [[d1_databases]]
 binding = "DB"
 database_name = "snapog-db"
-database_id = "1f7e2373-40c6-4330-9574-423682facfbc"
+database_id = "3a379b81-4853-45ea-846a-7a7f87def215"
 
 [vars]
 ENVIRONMENT = "development"
