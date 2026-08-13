@@ -237,11 +237,9 @@ and writes one PR comment. That's it.
 ## Distribution
 
 Lives in its own dedicated repo (`vladimirbakalov/secret-scan-action`), so the
-`uses:` line above works for anyone today. It is **not yet listed on the
-GitHub Marketplace** — that requires an interactive "Publish this release to
-the Marketplace" step in GitHub's web UI (there's no API/CLI equivalent).
-Completing that publish step is a follow-up, not a blocker to using the
-action today.
+`uses:` line above works for anyone today. It's also listed on the
+[GitHub Marketplace](https://github.com/marketplace/actions/secret-scan-action),
+so it's discoverable there in addition to a direct `uses:` reference.
 
 ## License
 
