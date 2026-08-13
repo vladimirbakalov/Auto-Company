@@ -866,6 +866,60 @@ describe("scanLine — true positives (known-leaked-secret patterns)", () => {
     expect(findings.some((f) => f.ruleId === "zendesk-secret-key")).toBe(false);
   });
 
+  it("flags a Discord client ID-shaped value when the keyword 'discord' is nearby", () => {
+    const value = "123456789".repeat(2);
+    const findings = scanLine(line(`const discord_client_id = "${value}";`));
+    expect(findings.some((f) => f.ruleId === "discord-client-id" && f.confidence === "generic")).toBe(true);
+  });
+
+  it("does not flag an 18-digit value shaped like a Discord client ID without the keyword nearby", () => {
+    const value = "123456789".repeat(2);
+    const findings = scanLine(line(`const unrelated_var = "${value}";`));
+    expect(findings.some((f) => f.ruleId === "discord-client-id")).toBe(false);
+  });
+
+  it("does not flag a Discord client ID-shaped value that is one digit short even with the keyword nearby", () => {
+    const value = "123456789".repeat(2).slice(0, 17);
+    const findings = scanLine(line(`const discord_client_id = "${value}";`));
+    expect(findings.some((f) => f.ruleId === "discord-client-id")).toBe(false);
+  });
+
+  it("flags a Discord client secret-shaped value when the keyword 'discord' is nearby", () => {
+    const value = "aB3fD1x9Qz".repeat(4).slice(0, 32).toLowerCase();
+    const findings = scanLine(line(`const discord_client_secret = "${value}";`));
+    expect(findings.some((f) => f.ruleId === "discord-client-secret" && f.confidence === "generic")).toBe(true);
+  });
+
+  it("does not flag a 32-char value shaped like a Discord client secret without the keyword nearby", () => {
+    const value = "aB3fD1x9Qz".repeat(4).slice(0, 32).toLowerCase();
+    const findings = scanLine(line(`const unrelated_var = "${value}";`));
+    expect(findings.some((f) => f.ruleId === "discord-client-secret")).toBe(false);
+  });
+
+  it("does not flag a Discord client secret-shaped value that is one character short even with the keyword nearby", () => {
+    const value = "aB3fD1x9Qz".repeat(4).slice(0, 31).toLowerCase();
+    const findings = scanLine(line(`const discord_client_secret = "${value}";`));
+    expect(findings.some((f) => f.ruleId === "discord-client-secret")).toBe(false);
+  });
+
+  it("flags a Dropbox-shaped value when the keyword 'dropbox' is nearby", () => {
+    const value = "aB3fD1x9Qz".repeat(2).slice(0, 15).toLowerCase();
+    const findings = scanLine(line(`const dropbox_api_token = "${value}";`));
+    expect(findings.some((f) => f.ruleId === "dropbox-api-token" && f.confidence === "generic")).toBe(true);
+  });
+
+  it("does not flag a 15-char value shaped like a Dropbox token without the keyword nearby", () => {
+    const value = "aB3fD1x9Qz".repeat(2).slice(0, 15).toLowerCase();
+    const findings = scanLine(line(`const unrelated_var = "${value}";`));
+    expect(findings.some((f) => f.ruleId === "dropbox-api-token")).toBe(false);
+  });
+
+  it("does not flag a Dropbox-shaped value that is one character short even with the keyword nearby", () => {
+    const value = "aB3fD1x9Qz".repeat(2).slice(0, 14).toLowerCase();
+    const findings = scanLine(line(`const dropbox_api_token = "${value}";`));
+    expect(findings.some((f) => f.ruleId === "dropbox-api-token")).toBe(false);
+  });
+
   it("flags a generic high-entropy value assigned to a secret-like variable name", () => {
     const findings = scanLine(line(`const apiToken = "zT9pQ2xR7mK4vL8nW1sD6fH3jC0bA5eY";`));
     expect(findings.some((f) => f.ruleId === "generic-high-entropy-secret" && f.confidence === "generic")).toBe(

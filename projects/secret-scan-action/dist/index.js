@@ -33445,6 +33445,34 @@ exports.PATTERN_RULES = [
         build: () => /[\w.-]{0,50}?zendesk(?:[ \t\w.-]{0,20})[\s'"]{0,3}(?:=|>|:{1,3}=|\|\||:|=>|\?=|,)[`'"\s=]{0,5}([a-z0-9]{40})(?:[`'"\s;]|\\[nr]|$)/gi,
         confidence: "generic",
     },
+    {
+        id: "discord-client-id",
+        description: "Discord Client ID (contextual)",
+        // Same keyword-proximity shape as the rest of this class. Value is a
+        // bare 18-digit numeric string, gated on "discord" appearing before the
+        // assignment. "generic" tier for the same reason as the rest of this
+        // class.
+        build: () => /[\w.-]{0,50}?discord(?:[ \t\w.-]{0,20})[\s'"]{0,3}(?:=|>|:{1,3}=|\|\||:|=>|\?=|,)[`'"\s=]{0,5}([0-9]{18})(?:[`'"\s;]|\\[nr]|$)/gi,
+        confidence: "generic",
+    },
+    {
+        id: "discord-client-secret",
+        description: "Discord Client Secret (contextual)",
+        // Same keyword-proximity shape, a bare 32-char alnum/=/_/- value, gated
+        // on "discord" appearing before the assignment. "generic" tier for the
+        // same reason as the rest of this class.
+        build: () => /[\w.-]{0,50}?discord(?:[ \t\w.-]{0,20})[\s'"]{0,3}(?:=|>|:{1,3}=|\|\||:|=>|\?=|,)[`'"\s=]{0,5}([a-z0-9=_-]{32})(?:[`'"\s;]|\\[nr]|$)/gi,
+        confidence: "generic",
+    },
+    {
+        id: "dropbox-api-token",
+        description: "Dropbox API Token (contextual)",
+        // Same keyword-proximity shape, a bare 15-char lowercase-alnum value,
+        // gated on "dropbox" appearing before the assignment. "generic" tier
+        // for the same reason as the rest of this class.
+        build: () => /[\w.-]{0,50}?dropbox(?:[ \t\w.-]{0,20})[\s'"]{0,3}(?:=|>|:{1,3}=|\|\||:|=>|\?=|,)[`'"\s=]{0,5}([a-z0-9]{15})(?:[`'"\s;]|\\[nr]|$)/gi,
+        confidence: "generic",
+    },
 ];
 /**
  * Variable-name fragment that makes a high-entropy value worth flagging.
