@@ -25,6 +25,7 @@ function runPatternRules(al: AddedLine): Finding[] {
   const findings: Finding[] = [];
 
   for (const rule of PATTERN_RULES) {
+    if (rule.pathFilter && !rule.pathFilter.test(al.filename)) continue;
     const regex = rule.build();
     let match: RegExpExecArray | null;
     while ((match = regex.exec(al.content))) {

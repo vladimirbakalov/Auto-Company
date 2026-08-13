@@ -2302,6 +2302,26 @@ describe("scanLine — true positives (known-leaked-secret patterns)", () => {
     expect(findings.some((f) => f.ruleId === "atlassian-api-token")).toBe(false);
   });
 
+  it("flags a HashiCorp Terraform password field in a .tf file", () => {
+    const findings = scanLine(line(`password = "abc123456789"`, { filename: "main.tf" }));
+    expect(findings.some((f) => f.ruleId === "hashicorp-tf-password" && f.confidence === "generic")).toBe(true);
+  });
+
+  it("flags a HashiCorp Terraform password field in a .hcl file", () => {
+    const findings = scanLine(line(`administrator_login_password = "abc123456789"`, { filename: "config.hcl" }));
+    expect(findings.some((f) => f.ruleId === "hashicorp-tf-password")).toBe(true);
+  });
+
+  it("does not flag a HashiCorp Terraform password field in a non-.tf/.hcl file", () => {
+    const findings = scanLine(line(`password = "abc123456789"`, { filename: "src/config.ts" }));
+    expect(findings.some((f) => f.ruleId === "hashicorp-tf-password")).toBe(false);
+  });
+
+  it("does not flag a .tf file line shaped like a password field but one character short", () => {
+    const findings = scanLine(line(`password = "abc1234"`, { filename: "main.tf" }));
+    expect(findings.some((f) => f.ruleId === "hashicorp-tf-password")).toBe(false);
+  });
+
   it("flags a generic high-entropy value assigned to a secret-like variable name", () => {
     const findings = scanLine(line(`const apiToken = "zT9pQ2xR7mK4vL8nW1sD6fH3jC0bA5eY";`));
     expect(findings.some((f) => f.ruleId === "generic-high-entropy-secret" && f.confidence === "generic")).toBe(

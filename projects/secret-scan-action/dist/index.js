@@ -34274,6 +34274,29 @@ exports.PATTERN_RULES = [
         build: () => /[\w.-]{0,50}?(?:ATLASSIAN|Atlassian|atlassian|CONFLUENCE|Confluence|confluence|JIRA|Jira|jira)(?:[ \t\w.-]{0,20})[\s'"]{0,3}(?:=|>|:{1,3}=|\|\||:|=>|\?=|,)[`'"\s=]{0,5}([a-zA-Z0-9]{20}[a-fA-F0-9]{4})(?:[`'"\s;]|\\[nr]|$)/g,
         confidence: "generic",
     },
+    {
+        id: "hashicorp-tf-password",
+        description: "HashiCorp Terraform password field (contextual)",
+        // Same keyword-proximity shape as the rest of this class, but upstream
+        // additionally gates this rule on the file path ending in .tf or .hcl
+        // (`path = '''(?i)\.(?:tf|hcl)$'''`), since "password = ..." alone is
+        // far too broad a keyword to ship file-type-agnostically. AddedLine
+        // already carries a filename per line (see scan.ts), so this is
+        // expressed via the pathFilter field rather than being permanently
+        // out of scope. The captured value keeps its literal surrounding
+        // double quotes (upstream's own capture group is `("[a-z0-9=_\-]{8,20}")`,
+        // not just the inner chars) — Terraform string literals are always
+        // double-quoted, so this rule deliberately only matches that exact
+        // quoting style, unlike most other rules in this class which accept
+        // backtick/single/double quotes interchangeably. Value charset widened
+        // from upstream's case-insensitive-under-flag "[a-z0-9=_-]" to
+        // "[a-zA-Z0-9=_-]" since this rule has no keyword-case restriction and
+        // so keeps the standard "gi" flag. "generic" tier for the same reason
+        // as the rest of this class.
+        build: () => /[\w.-]{0,50}?(?:administrator_login_password|password)(?:[ \t\w.-]{0,20})[\s'"]{0,3}(?:=|>|:{1,3}=|\|\||:|=>|\?=|,)[`'"\s=]{0,5}("[a-zA-Z0-9=_\-]{8,20}")(?:[`'"\s;]|\\[nr]|$)/gi,
+        confidence: "generic",
+        pathFilter: /\.(?:tf|hcl)$/i,
+    },
 ];
 /**
  * Variable-name fragment that makes a high-entropy value worth flagging.
@@ -34498,6 +34521,8 @@ const rules_1 = __nccwpck_require__(9244);
 function runPatternRules(al) {
     const findings = [];
     for (const rule of rules_1.PATTERN_RULES) {
+        if (rule.pathFilter && !rule.pathFilter.test(al.filename))
+            continue;
         const regex = rule.build();
         let match;
         while ((match = regex.exec(al.content))) {
