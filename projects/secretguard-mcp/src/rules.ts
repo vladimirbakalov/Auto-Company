@@ -1650,6 +1650,33 @@ export const PATTERN_RULES: PatternRule[] = [
     description: "HashiCorp Vault batch token",
     build: () => /\bhvb\.[A-Za-z0-9_-]{24,100}\b/g,
   },
+  {
+    id: "vercel-access-token",
+    description: "Vercel access token",
+    // Vercel's 2026 token-format overhaul gave every token type a
+    // distinctive prefix (vcp_ personal, vci_ integration, vca_ app access,
+    // vcr_ app refresh, vck_ API key), replacing the old unprefixed format.
+    // Documented example body is a ~24-char mixed-case alnum string; the
+    // range below gives slack without accepting the bare unprefixed legacy
+    // format (deliberately not covered, no distinctive shape of its own).
+    build: () => /\bvc(?:p|i|a|r|k)_[A-Za-z0-9]{20,40}\b/g,
+  },
+  {
+    id: "circleci-personal-access-token",
+    description: "CircleCI personal access token",
+    // 2023+ format: CCIPAT_ followed by a base58-encoded UUID, an
+    // underscore, then a 40-char hex string (the legacy bare-hex token
+    // body). Legacy bare-40-hex tokens with no prefix have no distinctive
+    // shape on their own and aren't covered.
+    build: () => /\bCCIPAT_[1-9A-HJ-NP-Za-km-z]{20,24}_[0-9a-f]{40}\b/g,
+  },
+  {
+    id: "circleci-project-access-token",
+    description: "CircleCI project access token",
+    // Same structure as circleci-personal-access-token but for the
+    // CCIPRJ_ project-scoped token prefix.
+    build: () => /\bCCIPRJ_[1-9A-HJ-NP-Za-km-z]{20,24}_[0-9a-f]{40}\b/g,
+  },
 ];
 
 /**

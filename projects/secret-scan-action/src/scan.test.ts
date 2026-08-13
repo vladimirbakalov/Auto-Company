@@ -527,6 +527,47 @@ describe("scanLine — true positives (known-leaked-secret patterns)", () => {
     );
   });
 
+  it("flags a Vercel access token", () => {
+    const token = `vcp_${"aB1cD2eF3".repeat(3).slice(0, 24)}`;
+    const findings = scanLine(line(`const VERCEL_TOKEN = "${token}";`));
+    expect(findings.some((f) => f.ruleId === "vercel-access-token" && f.confidence === "high")).toBe(true);
+  });
+
+  it("flags Vercel access tokens across all five documented prefixes", () => {
+    for (const prefix of ["vcp_", "vci_", "vca_", "vcr_", "vck_"]) {
+      const token = `${prefix}${"aB1cD2eF3".repeat(3).slice(0, 24)}`;
+      const findings = scanLine(line(`const VERCEL_TOKEN = "${token}";`));
+      expect(findings.some((f) => f.ruleId === "vercel-access-token" && f.confidence === "high")).toBe(true);
+    }
+  });
+
+  it("flags a CircleCI personal access token", () => {
+    const uuidPart = "aB1cD2eF3".repeat(3).slice(0, 22);
+    const hexPart = "0123456789abcdef".repeat(3).slice(0, 40);
+    const token = `CCIPAT_${uuidPart}_${hexPart}`;
+    const findings = scanLine(line(`const CIRCLECI_TOKEN = "${token}";`));
+    expect(findings.some((f) => f.ruleId === "circleci-personal-access-token" && f.confidence === "high")).toBe(
+      true,
+    );
+  });
+
+  it("flags a CircleCI project access token", () => {
+    const uuidPart = "aB1cD2eF3".repeat(3).slice(0, 22);
+    const hexPart = "0123456789abcdef".repeat(3).slice(0, 40);
+    const token = `CCIPRJ_${uuidPart}_${hexPart}`;
+    const findings = scanLine(line(`const CIRCLECI_TOKEN = "${token}";`));
+    expect(findings.some((f) => f.ruleId === "circleci-project-access-token" && f.confidence === "high")).toBe(
+      true,
+    );
+  });
+
+  it("does not flag a bare unprefixed 40-char hex string as a CircleCI token", () => {
+    const token = "0123456789abcdef".repeat(3).slice(0, 40);
+    const findings = scanLine(line(`const CIRCLECI_TOKEN = "${token}";`));
+    expect(findings.some((f) => f.ruleId === "circleci-personal-access-token")).toBe(false);
+    expect(findings.some((f) => f.ruleId === "circleci-project-access-token")).toBe(false);
+  });
+
   it("flags an age encryption secret key", () => {
     const body = "QPZRY9X8GF2TVDW0S3JN54KHCE6MUA7L".repeat(2).slice(0, 58);
     const findings = scanLine(line(`const AGE_KEY = "AGE-SECRET-KEY-1${body}";`));
