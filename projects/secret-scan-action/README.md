@@ -213,6 +213,21 @@ scoped filenames over broad prefixes where possible.
 - `.secretscanignore` is read from the PR's **base** commit, not its head. A
   PR can't suppress a secret it just introduced by adding a matching
   allowlist entry in that same PR — the entry only takes effect once merged.
+- This action never runs `actions/checkout` and never executes any code from
+  the PR — it only reads the diff and (optionally) `.secretscanignore` via the
+  GitHub API. That makes it safe to use on `pull_request_target`. **If your
+  own workflow adds a separate `actions/checkout` step with `ref: <PR head
+  sha>`** in a `pull_request_target` job, that combination checks out and can
+  execute untrusted fork code with access to your repo's secrets — a risk of
+  your workflow, not of this action. See GitHub's
+  [keeping your GitHub Actions and workflows secure](https://securitylab.github.com/resources/github-actions-preventing-pwn-requests/)
+  guidance before combining `pull_request_target` with checkout.
+- Variable names and masked context lines sent to Claude for optional triage
+  are untrusted, external input (from the PR author). The triage system
+  prompt instructs the model to treat that content as data to classify, not
+  as instructions — but triage is a noise-reduction convenience for the
+  non-blocking-by-default "generic" tier only; it never affects high-confidence
+  findings, which always block regardless of what the model says.
 
 ## Development
 

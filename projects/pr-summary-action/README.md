@@ -150,6 +150,29 @@ summary is generated.
   failed (401)"). The raw API error and your key are never included in
   logs or error messages.
 
+## Security notes
+
+- The Anthropic API key is never logged, never echoed into the PR comment,
+  and the SDK's `baseURL` is pinned explicitly to `https://api.anthropic.com`
+  so a compromised or misconfigured prior workflow step can't redirect it via
+  `ANTHROPIC_BASE_URL`.
+- This action never runs `actions/checkout` and never executes any code from
+  the PR — it only reads diff text via the GitHub API and sends it to
+  Claude for summarization. That makes it safe to use on `pull_request_target`
+  (needed if you want the summary comment to work on PRs from forks with
+  read-only default tokens). **If your own workflow adds a separate
+  `actions/checkout` step with `ref: <PR head sha>`** in a `pull_request_target`
+  job, that combination checks out and can execute untrusted fork code with
+  access to your repo's secrets — a risk of your workflow, not of this
+  action. See GitHub's
+  [keeping your GitHub Actions and workflows secure](https://securitylab.github.com/resources/github-actions-preventing-pwn-requests/)
+  guidance before combining `pull_request_target` with checkout.
+- The PR title, description, and diff text sent to Claude are untrusted,
+  external input. The system prompt instructs the model to treat that
+  content as data to summarize, not as instructions — but as with any
+  LLM-based tool, treat the generated summary as a reviewer aid, not a
+  security verdict; it should not be the sole basis for approving a PR.
+
 ## Distribution
 
 Lives in its own dedicated repo (`vladimirbakalov/pr-summary-action`), so the
