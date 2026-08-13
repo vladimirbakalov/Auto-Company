@@ -110,15 +110,24 @@ const RATE_LIMIT_ERROR = { error: 'Too many requests. Please wait a minute and t
 
 const app = new Hono<{ Bindings: Env }>();
 
-function htmlResponse(html: string, status = 200): Response {
-  return new Response(html, {
+// CSP is nonce-based rather than 'unsafe-inline' on script-src: every page
+// here ships its JS as an inline <script> block (no framework, no bundler),
+// so a blanket 'unsafe-inline' would allow any injected <script> too and
+// defeat the point. A fresh nonce per response lets the legitimate inline
+// block run while blocking anything an attacker manages to inject.
+function htmlResponseWithNonce(build: (nonce: string) => string, status = 200): Response {
+  const nonce = crypto.randomUUID();
+  return new Response(build(nonce), {
     status,
-    headers: { 'Content-Type': 'text/html; charset=utf-8' },
+    headers: {
+      'Content-Type': 'text/html; charset=utf-8',
+      'Content-Security-Policy': `default-src 'self'; script-src 'self' 'nonce-${nonce}'; style-src 'self' 'unsafe-inline'; img-src 'self' data:; connect-src 'self'; base-uri 'none'; frame-ancestors 'none'`,
+    },
   });
 }
 
 // ── Landing page + scan UI ──────────────────────────────────────────────────
-app.get('/', () => htmlResponse(landingPage()));
+app.get('/', () => htmlResponseWithNonce(nonce => landingPage(nonce)));
 
 // ── Scan API ─────────────────────────────────────────────────────────────────
 app.post('/api/scan', async c => {
@@ -461,12 +470,12 @@ const DASHBOARD_TRAILING_CHECKS_LIMIT = 50;
 
 app.get('/dashboard', async c => {
   if (!c.env.DB) {
-    return htmlResponse(dashboardSignInPage());
+    return htmlResponseWithNonce(() => dashboardSignInPage());
   }
 
   const user = await requireAuth(c);
   if (!user) {
-    return htmlResponse(dashboardSignInPage());
+    return htmlResponseWithNonce(() => dashboardSignInPage());
   }
 
   // v1 is one builder, one app (spec §5) — take the first (also most
@@ -475,7 +484,7 @@ app.get('/dashboard', async c => {
   const monitors = await listMonitorsForUser(c.env.DB, user.id);
   const monitor = monitors[0];
   if (!monitor) {
-    return htmlResponse(dashboardEmptyStatePage());
+    return htmlResponseWithNonce(() => dashboardEmptyStatePage());
   }
 
   const trailing = await fetchTrailingChecks(c.env.DB, monitor.id, DASHBOARD_TRAILING_CHECKS_LIMIT);
@@ -530,7 +539,7 @@ app.get('/dashboard', async c => {
     mutedUntil: monitor.muted_until,
   };
 
-  return htmlResponse(dashboardPage(data));
+  return htmlResponseWithNonce(nonce => dashboardPage(data, nonce));
 });
 
 // First ownership-checked mutation endpoint in this codebase (see

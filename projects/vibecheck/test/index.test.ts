@@ -1149,6 +1149,15 @@ describe('GET /dashboard', () => {
     expect(html).toContain('No baseline captured yet');
     expect(html).toContain("No alerts yet");
     expect(html).toContain('Pause alerts for 24h');
+
+    // CSP is nonce-based (script-src has no 'unsafe-inline') since the page
+    // ships its interactivity as an inline <script>: the header's nonce must
+    // match the one on the tag, or the mute/resume button silently breaks.
+    const csp = res.headers.get('Content-Security-Policy');
+    expect(csp).toContain("script-src 'self' 'nonce-");
+    const nonce = csp?.match(/'nonce-([^']+)'/)?.[1];
+    expect(nonce).toBeTruthy();
+    expect(html).toContain(`<script nonce="${nonce}">`);
   });
 
   it('renders the sign-in state when unauthenticated', async () => {

@@ -4,7 +4,7 @@
 import type { AlertRow, AlertType, Finding } from './types';
 import type { CostRiskState } from './dashboard';
 
-export function landingPage(): string {
+export function landingPage(nonce: string): string {
   return `<!doctype html>
 <html lang="en">
 <head>
@@ -201,7 +201,7 @@ export function landingPage(): string {
     </footer>
   </div>
 
-<script>
+<script nonce="${nonce}">
 (function () {
   const form = document.getElementById('scan-form');
   const input = document.getElementById('repo-input');
@@ -743,7 +743,7 @@ function renderAlerts(alerts: AlertRow[]): string {
     .join('\n');
 }
 
-export function dashboardPage(data: DashboardData): string {
+export function dashboardPage(data: DashboardData, nonce: string): string {
   const lastCheckedText = data.lastCheckAt ? formatTimestamp(data.lastCheckAt) : 'Not checked yet';
   const statusLabel = data.status === 'up' ? 'Up' : data.status === 'down' ? 'Down' : 'Unknown';
 
@@ -783,7 +783,7 @@ ${renderAlerts(data.alerts)}
       <p id="mute-status" class="muted-text" style="margin:10px 0 0;">${data.muted && data.mutedUntil ? `Alerts paused until ${formatTimestamp(data.mutedUntil)}` : 'Alerts are active.'}</p>
     </div>
 
-<script>
+<script nonce="${nonce}">
 (function () {
   var btn = document.getElementById('mute-toggle');
   if (!btn) return;
